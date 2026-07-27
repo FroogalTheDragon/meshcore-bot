@@ -47,38 +47,39 @@ class HamHelperCommand(BaseCommand):
         question_text = question["question"]
         question_answers = question["answers"]
         question_figure = question["figure"]
-        question_body = f"""
-            {question_id}:
-            {question_text}
-        """
-        print(len(question_answers))
+        correct_letter = question["correct_letter"]
         if question:
-            await self.send_response(message, question_body)
+            print("Sending message text")
+            await self.send_response(message, question_text)
             await asyncio.sleep(3)
-            try:
-                for index, answer in enumerate(question_answers):
-                    asyncio.sleep(3)
-                    if index == 0:
-                        # A
-                        answer = f"A. {answer}"
-                    elif index == 1:
-                        # B
-                        answer = f"B. {answer}"
-                    elif index == 2:
-                        # C
-                        answer = f"C. {answer}"
-                    elif index == 3:
-                        # D
-                        answer = f"D. {answer}"
-                    else:
-                        # E?
-                        print("Something weird here?")
-                    await self.send_response(message, answer, skip_user_rate_limit=True)
-            except BaseException as e:
-                print(f"Failed to send answers: {e}")
-            await asyncio.sleep(3)
+
+            for index, answer in enumerate(question_answers):
+                await asyncio.sleep(3)
+                if index == 0:
+                    # A
+                    answer = f"A. {answer}"
+                elif index == 1:
+                    # B
+                    answer = f"B. {answer}"
+                elif index == 2:
+                    # C
+                    answer = f"C. {answer}"
+                elif index == 3:
+                    # D
+                    answer = f"D. {answer}"
+                else:
+                    print("Something weird here?")
+                print("Sending answer")
+                await self.send_response(message, answer, skip_user_rate_limit=True)
+
             if question_figure:
+                print("Sending figure")
+                await asyncio.sleep(3)
                 await self.send_response(message, question_figure, skip_user_rate_limit=True)
+            
+            print("Sending correct letter")
+            await asyncio.sleep(20)
+            await self.send_response(message, f"The correct answer is: {correct_letter}", skip_user_rate_limit=True)
             return True
-        await self.send_response(message, "Failed to load question, check logs for more details...")
+        await self.send_response(message, "Failed to load question, check logs for more details...", skip_user_rate_limit=True)
         return False
