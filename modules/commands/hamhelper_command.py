@@ -26,7 +26,7 @@ class HamHelperCommand(BaseCommand):
     def __init__(self, bot):
         super().__init__(bot)
         
-    def send_data(data: str, attempts: int) -> bool:
+    async def send_data(self, data: str, attempts: int) -> bool:
         if not await self.send_response(message, data):
             while attempts > 0:
                 # Retry sending
@@ -55,6 +55,7 @@ class HamHelperCommand(BaseCommand):
                 raise BaseException(f"Couldn't find hamhelper question data at {data_path}")
         except BaseException as e:
             print(f"Failed to load question: {e}")
+            return None
 
     async def execute(self, message: MeshMessage) -> bool:
         question = self.generate_question()
@@ -65,19 +66,9 @@ class HamHelperCommand(BaseCommand):
         correct_letter = question["correct_letter"]
         if question:
             print("Sending message text")
-            if not await self.send_response(message, question_text):
-                print("Failed to send question text, retrying...")
-                num_of_tries = 3
-                tries = 1
-                while tries < num_of_tries:
-                    if not await self.send_response(message, question_text):
-                        if tries < num_of_tries:
-                            print(f"Attempt {tries} of 3")
-                            await self.send_response(message, question_text)
-                            tries += 1
-                            continue
-                        print(f"Failed to send after {tries} tries")
-                    break
+            if not await self.send_data(question_text, 3):
+                print("Failed to send question text after 3 tries")
+                raise BaseException("Failed to send question text")
             await asyncio.sleep(3)
 
             for index, answer in enumerate(question_answers):
@@ -97,16 +88,28 @@ class HamHelperCommand(BaseCommand):
                 else:
                     print("Oops!!  Too many options...")
                 print("Sending answer")
-                await self.send_response(message, answer, skip_user_rate_limit=True)
+                # await self.send_response(message, answer, skip_user_rate_limit=True)
+                if not await self.send_data(answer, 3):
+                    print("Failed to send answers after 3 tries")
+                    raise("Failed to send answers after 3 tries")
 
             if question_figure:
                 print("Sending figure")
                 await asyncio.sleep(3)
-                await self.send_response(message, question_figure, skip_user_rate_limit=True)
+                # await self.send_response(message, question_figure, skip_user_rate_limit=True)
+                if not self.send_data(question_figure, 3):
+                    print("Failed to send figure for question")
+                    raise("Failed to send figure for question")
             
             print("Sending correct letter")
             await asyncio.sleep(20)
-            await self.send_response(message, f"The correct answer is: {correct_letter}", skip_user_rate_limit=True)
+            # await self.send_response(message, f"The correct answer is: {correct_letter}", skip_user_rate_limit=True)
+            if not self.send_data(f"The correct answer is: {correct_letter}", 3):
+                raise("Failed to send answer after 3 tries")
+            
+            # Everything seemed to send fine return true
             return True
         await self.send_response(message, "Failed to load question, check logs for more details...", skip_user_rate_limit=True)
+        
+        # Couldn't load the question
         return False
