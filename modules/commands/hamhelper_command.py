@@ -25,6 +25,21 @@ class HamHelperCommand(BaseCommand):
 
     def __init__(self, bot):
         super().__init__(bot)
+        
+    def send_data(data: str, attempts: int) -> bool:
+        if not await self.send_response(message, data):
+            while attempts > 0:
+                # Retry sending
+                if not await self.send_response(message, data):
+                    # If it fails again keep trying until it succeeds or until tries = attempts
+                    tries -= 1
+                    print(f"Trying to send {attempts} more times")
+                # Sent after so many tries
+                return True
+            # Failed to send
+            return False
+        # Sent after the first try!
+        return True
 
     def generate_question(self) -> dict or None:
         cwd = Path(__file__).resolve().parent
@@ -50,7 +65,19 @@ class HamHelperCommand(BaseCommand):
         correct_letter = question["correct_letter"]
         if question:
             print("Sending message text")
-            await self.send_response(message, question_text)
+            if not await self.send_response(message, question_text):
+                print("Failed to send question text, retrying...")
+                num_of_tries = 3
+                tries = 1
+                while tries < num_of_tries:
+                    if not await self.send_response(message, question_text):
+                        if tries < num_of_tries:
+                            print(f"Attempt {tries} of 3")
+                            await self.send_response(message, question_text)
+                            tries += 1
+                            continue
+                        print(f"Failed to send after {tries} tries")
+                    break
             await asyncio.sleep(3)
 
             for index, answer in enumerate(question_answers):
@@ -68,7 +95,7 @@ class HamHelperCommand(BaseCommand):
                     # D
                     answer = f"D. {answer}"
                 else:
-                    print("Something weird here?")
+                    print("Oops!!  Too many options...")
                 print("Sending answer")
                 await self.send_response(message, answer, skip_user_rate_limit=True)
 
