@@ -26,13 +26,13 @@ class HamHelperCommand(BaseCommand):
     def __init__(self, bot):
         super().__init__(bot)
         
-    async def send_data(self, data: str, attempts: int) -> bool:
-        if not await self.send_response(message, data):
-            while attempts > 0:
+    async def send_data(self, message: MeshMessage, data: str, attempts: int) -> bool:
+        if not await self.send_response(message, data, skip_user_rate_limit=True):
+            while attempts != 0:
                 # Retry sending
-                if not await self.send_response(message, data):
+                if not await self.send_response(message, data, skip_user_rate_limit=True):
                     # If it fails again keep trying until it succeeds or until tries = attempts
-                    tries -= 1
+                    attempts -= 1
                     print(f"Trying to send {attempts} more times")
                 # Sent after so many tries
                 return True
@@ -66,7 +66,7 @@ class HamHelperCommand(BaseCommand):
         correct_letter = question["correct_letter"]
         if question:
             print("Sending message text")
-            if not await self.send_data(question_text, 3):
+            if not await self.send_data(message, question_text, 3):
                 print("Failed to send question text after 3 tries")
                 raise BaseException("Failed to send question text")
             await asyncio.sleep(3)
@@ -89,7 +89,7 @@ class HamHelperCommand(BaseCommand):
                     print("Oops!!  Too many options...")
                 print("Sending answer")
                 # await self.send_response(message, answer, skip_user_rate_limit=True)
-                if not await self.send_data(answer, 3):
+                if not await self.send_data(message, answer, 3):
                     print("Failed to send answers after 3 tries")
                     raise("Failed to send answers after 3 tries")
 
@@ -97,14 +97,14 @@ class HamHelperCommand(BaseCommand):
                 print("Sending figure")
                 await asyncio.sleep(3)
                 # await self.send_response(message, question_figure, skip_user_rate_limit=True)
-                if not self.send_data(question_figure, 3):
+                if not self.send_data(message, question_figure, 3):
                     print("Failed to send figure for question")
                     raise("Failed to send figure for question")
             
             print("Sending correct letter")
             await asyncio.sleep(20)
             # await self.send_response(message, f"The correct answer is: {correct_letter}", skip_user_rate_limit=True)
-            if not self.send_data(f"The correct answer is: {correct_letter}", 3):
+            if not await self.send_data(message, f"The correct answer is: {correct_letter}", 3):
                 raise("Failed to send answer after 3 tries")
             
             # Everything seemed to send fine return true
