@@ -14,7 +14,7 @@ import asyncio
 from ..models import MeshMessage
 from .base_command import BaseCommand
 from pathlib import Path
-from ..transmission import TransmissionTracker
+from ..transmission_tracker import TransmissionTracker
 
 class HamHelperCommand(BaseCommand):
     # Plugin metadata
