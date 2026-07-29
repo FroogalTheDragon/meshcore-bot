@@ -489,6 +489,20 @@ def _m0012_purging_log_details_column(cursor: sqlite3.Cursor) -> None:
     if _table_exists(cursor, "purging_log"):
         _add_column(cursor, "purging_log", "details", "TEXT")
 
+def _m0013_create_hamhelper_leaderboard_table(cursor: sqlite3.Cursor) -> None:
+    cursor.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS hamhelper_leaderboard (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_handle TEXT NOT NULL,
+            questions_correct INTEGER DEFAULT 0,
+            question_incorrect INTEGER DEFAULT 0,
+            total_questions INTEGER DEFAULT 0,
+            percentage_wrong FLOAT DEFAULT 0.0,
+            last_answer_ts INTEGER DEFAULT 0
+        );
+        """
+    )
 
 # ---------------------------------------------------------------------------
 # Migration registry — append new entries here, never remove or reorder.
