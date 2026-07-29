@@ -27,6 +27,7 @@ class HamHelperCommand(BaseCommand):
     def __init__(self, bot):
         super().__init__(bot)
         self.transmission_tracker = TransmissionTracker(bot)
+        self.current_question = None
         
     def get_repeats(self):
         repeat = self.transmission_tracker.get_repeat_info("hamhelper")
