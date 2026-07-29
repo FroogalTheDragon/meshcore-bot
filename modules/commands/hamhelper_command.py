@@ -29,7 +29,7 @@ class HamHelperCommand(BaseCommand):
         self.transmission_tracker = TransmissionTracker(bot)
         
     def get_repeats(self):
-        repeat = get_repeat_info("hamhelper")
+        repeat = self.transmission_tracker.get_repeat_info("hamhelper")
         print(repeat)
         
         
