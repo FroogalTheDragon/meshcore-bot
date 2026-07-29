@@ -14,6 +14,7 @@ import asyncio
 from ..models import MeshMessage
 from .base_command import BaseCommand
 from pathlib import Path
+from ..transmission_tracker import TransmissionTracker
 
 class HamHelperCommand(BaseCommand):
     # Plugin metadata
@@ -25,6 +26,13 @@ class HamHelperCommand(BaseCommand):
 
     def __init__(self, bot):
         super().__init__(bot)
+        self.transmission_tracker = TransmissionTracker(bot)
+        
+    def get_repeats(self):
+        repeat = get_repeat_info("hamhelper")
+        print(repeat)
+        
+        
         
     async def send_data(self, message: MeshMessage, data: str, attempts: int) -> bool:
         if not await self.send_response(message, data, skip_user_rate_limit=True):
@@ -70,6 +78,7 @@ class HamHelperCommand(BaseCommand):
                 print("Failed to send question text after 3 tries")
                 raise BaseException("Failed to send question text")
             await asyncio.sleep(3)
+            self.get_repeats()
 
             for index, answer in enumerate(question_answers):
                 await asyncio.sleep(3)
