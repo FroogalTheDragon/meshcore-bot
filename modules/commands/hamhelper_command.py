@@ -83,7 +83,7 @@ class HamHelperCommand(BaseCommand):
             with self.bot.db_manager.connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT id, questions_correct, question_incorrect "
+                    "SELECT id, questions_correct, questions_incorrect "
                     "FROM hamhelper_leaderboard WHERE user_handle = ?",
                     (user_handle,),
                 )
@@ -94,29 +94,29 @@ class HamHelperCommand(BaseCommand):
                     correct_count = 1 if correct else 0
                     incorrect_count = 0 if correct else 1
                     total = correct_count + incorrect_count
-                    pct_wrong = (incorrect_count / total) * 100 if total else 0.0
+                    accuracy_pct = (correct_count / total) * 100
                     cursor.execute(
                         """
                         INSERT INTO hamhelper_leaderboard
-                            (user_handle, questions_correct, question_incorrect,
-                             total_questions, percentage_wrong, last_answer_ts)
+                            (user_handle, questions_correct, questions_incorrect,
+                             total_questions, question_accuracy, last_answer_ts)
                         VALUES (?, ?, ?, ?, ?, ?)
                         """,
-                        (user_handle, correct_count, incorrect_count, total, pct_wrong, now_ts),
+                        (user_handle, correct_count, incorrect_count, total, accuracy_pct, now_ts),
                     )
                 else:
                     correct_count = row["questions_correct"] + (1 if correct else 0)
-                    incorrect_count = row["question_incorrect"] + (0 if correct else 1)
+                    incorrect_count = row["questions_incorrect"] + (0 if correct else 1)
                     total = correct_count + incorrect_count
-                    pct_wrong = (incorrect_count / total) * 100 if total else 0.0
+                    accuracy_pct = (correct_count / total) * 100 if total else 0.0
                     cursor.execute(
                         """
                         UPDATE hamhelper_leaderboard
-                        SET questions_correct = ?, question_incorrect = ?,
-                            total_questions = ?, percentage_wrong = ?, last_answer_ts = ?
+                        SET questions_correct = ?, questions_incorrect = ?,
+                            total_questions = ?, question_accuracy = ?, last_answer_ts = ?
                         WHERE id = ?
                         """,
-                        (correct_count, incorrect_count, total, pct_wrong, now_ts, row["id"]),
+                        (correct_count, incorrect_count, total, accuracy_pct, now_ts, row["id"]),
                     )
                 conn.commit()
         except Exception as e:
@@ -259,7 +259,14 @@ class HamHelperCommand(BaseCommand):
             await self.send_response(message, "Question Leaderboard:", skip_user_rate_limit=True)
             leaderboard_rows = self._get_leaderboard_data()
             for row in leaderboard_rows:
-                leaderboard_string = f"{row["user_handle"]} has answered {row["total_questions"]}, getting {row["questions_correct"]} correct\n{row["question_incorrect"]} incorrect\n{row["percentage_wrong"]}% of questions answered incorrectly\nLast practiced on {datetime.fromtimestamp(row["last_answer_ts"])}."
+                leaderboard_string = (
+                    f"{row['user_handle']}\n"
+                    f"Total Questions: {row['total_questions']}\n"
+                    f"Questions Correct: {row['questions_correct']}\n"
+                    f"Questions Incorrect: {row['questions_incorrect']}\n"
+                    f"Question Accuracy: {round(row['question_accuracy'], 1)}%\n"
+                    f"Last practiced: {datetime.fromtimestamp(row['last_answer_ts'])}."
+                )
                 await self.send_response(message, leaderboard_string, skip_user_rate_limit=True)
                 await asyncio.sleep(3)
             return True
@@ -270,11 +277,6 @@ class HamHelperCommand(BaseCommand):
 
         # --- Trigger keyword ---
         if self._active_question:
-            # await self.send_response(
-            #     message,
-            #     "A question is already open — reply with A, B, C, or D to answer it!",
-            #     skip_user_rate_limit=True,
-            # )
             await self._repeat_question(message)
             return True
 
