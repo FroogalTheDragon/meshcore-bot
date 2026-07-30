@@ -50,7 +50,7 @@ class DBManager:
         'purging_log',  # Repeater manager
         'mesh_connections',  # Mesh graph for path validation
         'observed_paths',  # Repeater manager - observed paths from adverts and messages
-        'hamhelper_leaderboard'
+        'hamhelper_leaderboard' # Database for the hamhelper leaderboard
     }
 
     def __init__(self, bot: Any, db_path: str = "meshcore_bot.db"):

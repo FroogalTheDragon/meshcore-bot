@@ -489,18 +489,20 @@ def _m0012_purging_log_details_column(cursor: sqlite3.Cursor) -> None:
     if _table_exists(cursor, "purging_log"):
         _add_column(cursor, "purging_log", "details", "TEXT")
 
-def _m0013_create_hamhelper_leaderboard_table(cursor: sqlite3.Cursor) -> None:
+def _m0013_create_hamhelper_tables(cursor: sqlite3.Cursor) -> None:
     cursor.executescript(
         """
         CREATE TABLE IF NOT EXISTS hamhelper_leaderboard (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_handle TEXT NOT NULL,
+            user_handle TEXT NOT NULL UNIQUE,
             questions_correct INTEGER DEFAULT 0,
             question_incorrect INTEGER DEFAULT 0,
             total_questions INTEGER DEFAULT 0,
             percentage_wrong FLOAT DEFAULT 0.0,
-            last_answer_ts INTEGER DEFAULT 0
+            last_answer_ts INTEGER DEFAULT 0,
+            questions_answered_correctly TEXT
         );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_hamhelper_leaderboard_user_handle ON hamhelper_leaderboard(user_handle);
         """
     )
 
@@ -523,7 +525,7 @@ MIGRATIONS: list[MigrationEntry] = [
     (10, "create repeater/graph tables", _m0010_create_repeater_and_graph_tables),
     (11, "repeater/graph indexes", _m0011_repeater_and_graph_indexes),
     (12, "purging_log: add details column", _m0012_purging_log_details_column),
-    (13, "create hamhelper leaderboard table", _m0013_create_hamhelper_leaderboard_table)
+    (13, "create hamhelper leaderboard table", _m0013_create_hamhelper_tables)
 ]
 
 
