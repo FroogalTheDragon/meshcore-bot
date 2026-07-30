@@ -24,9 +24,9 @@ class HamHelperCommand(BaseCommand):
     cooldown_seconds = 3
     figure_base_url = "https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030"
     figure_urls = {
-        fig_1: f"{figure_base_url}/t-1.png",
-        fig_2: f"{figure_base_url}/t-2.png",
-        fig_3: f"{figure_base_url}/t-3.png"
+        "fig_1": f"{figure_base_url}/t-1.png",
+        "fig_2": f"{figure_base_url}/t-2.png",
+        "fig_3": f"{figure_base_url}/t-3.png"
     }
 
     def __init__(self, bot):
