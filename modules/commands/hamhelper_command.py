@@ -129,7 +129,7 @@ class HamHelperCommand(BaseCommand):
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    SELECT * FROM hamhelper_leaderboard;
+                    SELECT * FROM hamhelper_leaderboard ORDER BY question_accuracy DESC;
                     """
                 )
                 rows = cursor.fetchall()
