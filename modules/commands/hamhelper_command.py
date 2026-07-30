@@ -22,6 +22,12 @@ class HamHelperCommand(BaseCommand):
     description = "Send a random question for the HAM radio license test."
     category = "education"
     cooldown_seconds = 3
+    figure_base_url = "https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030"
+    figure_urls = {
+        fig_1: f"{figure_base_url}/t-1.png",
+        fig_2: f"{figure_base_url}/t-2.png",
+        fig_3: f"{figure_base_url}/t-3.png"
+    }
 
     def __init__(self, bot):
         super().__init__(bot)
@@ -138,6 +144,16 @@ class HamHelperCommand(BaseCommand):
         except Exception as e:
             self.logger.error(f"Failed to get leaderboard data: {e}")
             raise
+        
+    def _get_figure_url(self, figure_file_name: str) -> str or None:
+        if figure_file_name == "t-1.png":
+            return self.figure_urls["fig_1"]
+        elif figure_file_name == "t-2.png":
+            return self.figure_urls["fig_2"]
+        elif figure_file_name == "t-3.png":
+            return self.figure_urls["fig_3"]
+        else:
+            return None
 
     async def _ask_new_question(self, message: MeshMessage) -> bool:
         question = self.generate_question()
@@ -221,6 +237,7 @@ class HamHelperCommand(BaseCommand):
                 return False
 
         if question_figure:
+            question_figure = self._get_figure_url(question_figure)
             await asyncio.sleep(3)
             if not await self.send_data(message, question_figure, 3):
                 print("Failed to send figure for question")
