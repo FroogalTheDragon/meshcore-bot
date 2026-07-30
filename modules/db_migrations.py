@@ -496,9 +496,9 @@ def _m0013_create_hamhelper_tables(cursor: sqlite3.Cursor) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_handle TEXT NOT NULL UNIQUE,
             questions_correct INTEGER DEFAULT 0,
-            question_incorrect INTEGER DEFAULT 0,
+            questions_incorrect INTEGER DEFAULT 0,
             total_questions INTEGER DEFAULT 0,
-            percentage_wrong FLOAT DEFAULT 0.0,
+            question_accuracy FLOAT DEFAULT 0.0,
             last_answer_ts INTEGER DEFAULT 0,
             questions_answered_correctly TEXT
         );
