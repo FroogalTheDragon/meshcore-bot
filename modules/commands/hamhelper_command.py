@@ -13,11 +13,12 @@ from ..models import MeshMessage
 from .base_command import BaseCommand
 from pathlib import Path
 from ..transmission_tracker import TransmissionTracker
+from datetime import datetime
 
 
 class HamHelperCommand(BaseCommand):
     name = "hamhelper"
-    keywords = ['hamhelper', 'helpmyham', 'hamme', 'whathamisit', 'a', 'b', 'c', 'd']
+    keywords = ['hamhelper', 'helpmyham', 'hamme', 'whathamisit', 'a', 'b', 'c', 'd', 'leaderboard', 'lb']
     description = "Send a random question for the HAM radio license test."
     category = "education"
     cooldown_seconds = 3
@@ -37,6 +38,19 @@ class HamHelperCommand(BaseCommand):
         # Same identity convention used elsewhere for per-user rate limiting: pubkey when
         # available, else display name.
         return message.sender_pubkey or message.sender_id or "unknown"
+    
+    def get_question_pool(self) -> dict:
+        data_path = Path(__file__).resolve().parent.parent.parent
+        try:
+            if data_path.exists():
+                with open((data_path / "data/randomlines/ham_questions.json"), "r") as data:
+                    json_data = json.load(data)
+                    return json_data
+            else:
+                raise BaseException(f"Couldn't load question pool!")
+        except BaseException as e:
+            print(f"Failed to load question pool: {e}")
+            return None
 
     async def send_data(self, message: MeshMessage, data: str, attempts: int) -> bool:
         if not await self.send_response(message, data, skip_user_rate_limit=True):
@@ -107,6 +121,23 @@ class HamHelperCommand(BaseCommand):
                 conn.commit()
         except Exception as e:
             self.logger.error(f"hamhelper: failed to record result for {user_handle}: {e}")
+            
+    def _get_leaderboard_data(self):
+        try:
+            rows = None
+            with self.bot.db_manager.connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT * FROM hamhelper_leaderboard;
+                    """
+                )
+                rows = cursor.fetchall()
+            return rows
+                    
+        except Exception as e:
+            self.logger.error(f"Failed to get leaderboard data: {e}")
+            raise
 
     async def _ask_new_question(self, message: MeshMessage) -> bool:
         question = self.generate_question()
@@ -153,6 +184,52 @@ class HamHelperCommand(BaseCommand):
             "asked_at": time.time(),
         }
         return True
+    
+    async def _repeat_question(self, message: MeshMessage):
+        question = None
+        question_pool = self.get_question_pool()
+        for q in list(question_pool):
+            if q["id"] == self._active_question["question_id"]:
+                question = q
+
+        if not question:
+            await self.send_response(
+                message, "Failed to load question, check logs for more details...",
+                skip_user_rate_limit=True,
+            )
+            return False
+
+        question_text = question["question"]
+        question_answers = question["answers"]
+        question_figure = question["figure"]
+        correct_letter = question["correct_letter"]
+
+        if not await self.send_data(message, question_text, 3):
+            return False
+
+        await asyncio.sleep(3)
+        self.get_repeats()
+
+        labels = ["A", "B", "C", "D"]
+        for index, answer in enumerate(question_answers):
+            await asyncio.sleep(3)
+            if index >= len(labels):
+                print("Oops!! Too many options...")
+                continue
+            if not await self.send_data(message, f"{labels[index]}. {answer}", 3):
+                print("Failed to send answers after 3 tries")
+                return False
+
+        if question_figure:
+            await asyncio.sleep(3)
+            if not await self.send_data(message, question_figure, 3):
+                print("Failed to send figure for question")
+                return False
+
+        await asyncio.sleep(1)
+        await self.send_data(message, "Anyone can answer — reply with A, B, C, or D!", 3)
+
+        return True
 
     async def execute(self, message: MeshMessage) -> bool:
         text = (message.content_lower or message.content).strip().lower()
@@ -177,6 +254,15 @@ class HamHelperCommand(BaseCommand):
                     message, f"❌ Not quite, {who}. Try again!", skip_user_rate_limit=True
                 )
             return True
+        
+        if text in ("leaderboard", "lb"):
+            await self.send_response(message, "Question Leaderboard:", skip_user_rate_limit=True)
+            leaderboard_rows = self._get_leaderboard_data()
+            for row in leaderboard_rows:
+                leaderboard_string = f"{row["user_handle"]} has answered {row["total_questions"]}, getting {row["questions_correct"]} correct\n{row["question_incorrect"]} incorrect\n{row["percentage_wrong"]}% of questions answered incorrectly\nLast practiced on {datetime.fromtimestamp(row["last_answer_ts"])}."
+                await self.send_response(message, leaderboard_string, skip_user_rate_limit=True)
+                await asyncio.sleep(3)
+            return True
 
         # --- Bare a/b/c/d with nothing open — not ours ---
         if text in ("a", "b", "c", "d") and not self._active_question:
@@ -184,11 +270,12 @@ class HamHelperCommand(BaseCommand):
 
         # --- Trigger keyword ---
         if self._active_question:
-            await self.send_response(
-                message,
-                "A question is already open — reply with A, B, C, or D to answer it!",
-                skip_user_rate_limit=True,
-            )
+            # await self.send_response(
+            #     message,
+            #     "A question is already open — reply with A, B, C, or D to answer it!",
+            #     skip_user_rate_limit=True,
+            # )
+            await self._repeat_question(message)
             return True
 
         return await self._ask_new_question(message)
