@@ -237,10 +237,15 @@ class HamHelperCommand(BaseCommand):
                 return False
 
         if question_figure:
-            question_figure = self._get_figure_url(question_figure)
-            await asyncio.sleep(3)
-            if not await self.send_data(message, question_figure, 3):
-                print("Failed to send figure for question")
+            qurl = self._get_figure_url(question_figure)
+            if qurl:
+                print(f"Question Figure: {qurl}")
+                await asyncio.sleep(3)
+                if not await self.send_data(message, qurl, 3):
+                    print("Failed to send figure for question")
+                    return False
+            else:
+                print(f"Failed to get figure URL, got {qurl} instead")
                 return False
 
         await asyncio.sleep(1)
