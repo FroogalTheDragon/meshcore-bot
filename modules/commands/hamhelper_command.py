@@ -248,7 +248,7 @@ class HamHelperCommand(BaseCommand):
                 print(f"Failed to get figure URL, got {qurl} instead")
                 return False
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(3)
         await self.send_data(message, "Anyone can answer — reply with A, B, C, or D!", 3)
 
         return True
