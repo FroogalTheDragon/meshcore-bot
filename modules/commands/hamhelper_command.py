@@ -5,15 +5,16 @@ generated. Wrong answers are logged too but leave the question open.
 
 Questions from https://github.com/russolsen/ham_radio_question_pool — thanks russolsen!
 """
-import random
-import json
-import time
 import asyncio
-from ..models import MeshMessage
-from .base_command import BaseCommand
-from pathlib import Path
-from ..transmission_tracker import TransmissionTracker
+import json
+import random
+import time
 from datetime import datetime
+from pathlib import Path
+
+from ..models import MeshMessage
+from ..transmission_tracker import TransmissionTracker
+from .base_command import BaseCommand
 
 
 class HamHelperCommand(BaseCommand):
@@ -44,16 +45,16 @@ class HamHelperCommand(BaseCommand):
         # Same identity convention used elsewhere for per-user rate limiting: pubkey when
         # available, else display name.
         return message.sender_pubkey or message.sender_id or "unknown"
-    
+
     def get_question_pool(self) -> dict:
         data_path = Path(__file__).resolve().parent.parent.parent
         try:
             if data_path.exists():
-                with open((data_path / "data/randomlines/ham_questions.json"), "r") as data:
+                with open(data_path / "data/randomlines/ham_questions.json") as data:
                     json_data = json.load(data)
                     return json_data
             else:
-                raise BaseException(f"Couldn't load question pool!")
+                raise BaseException("Couldn't load question pool!")
         except BaseException as e:
             print(f"Failed to load question pool: {e}")
             return None
@@ -73,7 +74,7 @@ class HamHelperCommand(BaseCommand):
         data_path = Path(__file__).resolve().parent.parent.parent
         try:
             if data_path.exists():
-                with open((data_path / "data/randomlines/ham_questions.json"), "r") as data:
+                with open(data_path / "data/randomlines/ham_questions.json") as data:
                     json_data = json.load(data)
                     question = json_data[random.randrange(0, len(json_data))]
                     return question
@@ -127,7 +128,7 @@ class HamHelperCommand(BaseCommand):
                 conn.commit()
         except Exception as e:
             self.logger.error(f"hamhelper: failed to record result for {user_handle}: {e}")
-            
+
     def _get_leaderboard_data(self):
         try:
             rows = None
@@ -140,11 +141,11 @@ class HamHelperCommand(BaseCommand):
                 )
                 rows = cursor.fetchall()
             return rows
-                    
+
         except Exception as e:
             self.logger.error(f"Failed to get leaderboard data: {e}")
             raise
-        
+
     def _get_figure_url(self, figure_file_name: str) -> str or None:
         if figure_file_name == "t-1.png":
             return self.figure_urls["fig_1"]
@@ -200,7 +201,7 @@ class HamHelperCommand(BaseCommand):
             "asked_at": time.time(),
         }
         return True
-    
+
     async def _repeat_question(self, message: MeshMessage):
         question = None
         question_pool = self.get_question_pool()
@@ -276,7 +277,7 @@ class HamHelperCommand(BaseCommand):
                     message, f"❌ Not quite, {who}. Try again!", skip_user_rate_limit=True
                 )
             return True
-        
+
         if text in ("leaderboard", "lb"):
             await self.send_response(message, "Question Leaderboard:", skip_user_rate_limit=True)
             leaderboard_rows = self._get_leaderboard_data()
