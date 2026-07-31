@@ -140,7 +140,8 @@ class HamHelperCommand(BaseCommand):
                     """
                     SELECT * FROM hamhelper_leaderboard
                     WHERE total_questions >= ?
-                    ORDER BY question_accuracy DESC, total_questions DESC;
+                    ORDER BY question_accuracy DESC, total_questions DESC
+                    LIMIT 5;
                     """,
                     (self.min_leaderboard_questions,),
                 )
@@ -279,19 +280,23 @@ class HamHelperCommand(BaseCommand):
             return True
 
         if text in ("leaderboard", "lb"):
-            await self.send_response(message, "Question Leaderboard:", skip_user_rate_limit=True)
             leaderboard_rows = self._get_leaderboard_data()
-            for row in leaderboard_rows:
-                leaderboard_string = (
-                    f"{row['user_handle']}\n"
-                    f"Total Questions: {row['total_questions']}\n"
-                    f"Questions Correct: {row['questions_correct']}\n"
-                    f"Questions Incorrect: {row['questions_incorrect']}\n"
-                    f"Question Accuracy: {round(row['question_accuracy'], 1)}%\n"
-                    f"Last practiced: {datetime.fromtimestamp(row['last_answer_ts'])}."
+            if not leaderboard_rows:
+                await self.send_response(
+                    message,
+                    f"No one has answered {self.min_leaderboard_questions}+ questions yet!",
+                    skip_user_rate_limit=True,
                 )
-                await self.send_response(message, leaderboard_string, skip_user_rate_limit=True)
-                await asyncio.sleep(12)
+                return True
+
+            lines = ["Top 5 Leaderboard:"]
+            for i, row in enumerate(leaderboard_rows, start=1):
+                lines.append(
+                    f"{i}. {row['user_handle']} — {round(row['question_accuracy'], 1)}%"
+                )
+            leaderboard_string = "\n".join(lines)
+
+            await self.send_response(message, leaderboard_string, skip_user_rate_limit=True)
             return True
         
         if text in ("manual", "man"):
