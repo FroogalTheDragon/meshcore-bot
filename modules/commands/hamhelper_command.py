@@ -172,13 +172,10 @@ class HamHelperCommand(BaseCommand):
 
         if not await self.send_data(message, question_text, 3):
             return False
-
-        await asyncio.sleep(3)
-        self.get_repeats()
-
+        await asyncio.sleep(12)
         labels = ["A", "B", "C", "D"]
         for index, answer in enumerate(question_answers):
-            await asyncio.sleep(3)
+            await asyncio.sleep(12)
             if index >= len(labels):
                 print("Oops!! Too many options...")
                 continue
@@ -187,12 +184,12 @@ class HamHelperCommand(BaseCommand):
                 return False
 
         if question_figure:
-            await asyncio.sleep(3)
+            await asyncio.sleep(12)
             if not await self.send_data(message, question_figure, 3):
                 print("Failed to send figure for question")
                 return False
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(12)
         await self.send_data(message, "Anyone can answer — reply with A, B, C, or D!", 3)
 
         self._active_question = {
@@ -229,7 +226,7 @@ class HamHelperCommand(BaseCommand):
 
         labels = ["A", "B", "C", "D"]
         for index, answer in enumerate(question_answers):
-            await asyncio.sleep(3)
+            await asyncio.sleep(12)
             if index >= len(labels):
                 print("Oops!! Too many options...")
                 continue
@@ -241,7 +238,7 @@ class HamHelperCommand(BaseCommand):
             qurl = self._get_figure_url(question_figure)
             if qurl:
                 print(f"Question Figure: {qurl}")
-                await asyncio.sleep(3)
+                await asyncio.sleep(12)
                 if not await self.send_data(message, qurl, 3):
                     print("Failed to send figure for question")
                     return False
@@ -249,7 +246,7 @@ class HamHelperCommand(BaseCommand):
                 print(f"Failed to get figure URL, got {qurl} instead")
                 return False
 
-        await asyncio.sleep(3)
+        await asyncio.sleep(12)
         await self.send_data(message, "Anyone can answer — reply with A, B, C, or D!", 3)
 
         return True
@@ -267,9 +264,9 @@ class HamHelperCommand(BaseCommand):
                 self._active_question = None  # close it out before awaiting anything else
                 self._record_result(user_handle, correct=True)
                 await self.send_response(
-                    message, f"✅ Correct, {who}! Good job!", skip_user_rate_limit=True
+                    message, f"✅ Correct, {who}! Good job!  Next question will be shown in 60 seconds!", skip_user_rate_limit=True
                 )
-                await asyncio.sleep(2)
+                await asyncio.sleep(60)
                 await self._ask_new_question(message)
             else:
                 self._record_result(user_handle, correct=False)
@@ -291,7 +288,7 @@ class HamHelperCommand(BaseCommand):
                     f"Last practiced: {datetime.fromtimestamp(row['last_answer_ts'])}."
                 )
                 await self.send_response(message, leaderboard_string, skip_user_rate_limit=True)
-                await asyncio.sleep(3)
+                await asyncio.sleep(12)
             return True
 
         # --- Bare a/b/c/d with nothing open — not ours ---
