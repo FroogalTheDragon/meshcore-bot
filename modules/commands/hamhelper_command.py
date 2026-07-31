@@ -24,13 +24,12 @@ class HamHelperCommand(BaseCommand):
     category = "education"
     cooldown_seconds = 3
     figure_base_url = "https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030"
+    help_string = "Hamhelper: HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'manual'/'man' for this help."
     figure_urls = {
         "fig_1": f"{figure_base_url}/t-1.png",
         "fig_2": f"{figure_base_url}/t-2.png",
         "fig_3": f"{figure_base_url}/t-3.png"
     }
-    
-    help_string = "Hamhelper: HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'manual'/'man' for this help."
 
     def __init__(self, bot):
         super().__init__(bot)
