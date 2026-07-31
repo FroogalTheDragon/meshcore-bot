@@ -300,7 +300,7 @@ class HamHelperCommand(BaseCommand):
             return False
 
         # --- Trigger keyword ---
-        if text in ("hamhelper", "hh"):
+        if self._active_question:
             await self._repeat_question(message)
             return True
 
