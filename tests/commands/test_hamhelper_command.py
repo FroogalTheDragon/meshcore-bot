@@ -16,4 +16,10 @@ class TestHamhelper:
     def test_get_figure_url(self, command_mock_bot):
         pass
     
+    def test_ask_new_question(self, command_mock_bot):
+        pass
+    
+    def test_repeat_question(self, command_mock_bot):
+        pass
+    
     
