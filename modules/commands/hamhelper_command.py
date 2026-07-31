@@ -19,7 +19,7 @@ from .base_command import BaseCommand
 
 class HamHelperCommand(BaseCommand):
     name = "hamhelper"
-    keywords = ['hamhelper', 'hh', 'helpmyham', 'hamme', 'whathamisit', 'a', 'b', 'c', 'd', 'leaderboard', 'lb', 'manual']
+    keywords = ['hamhelper', 'hh', 'helpmyham', 'hamme', 'whathamisit', 'a', 'b', 'c', 'd', 'leaderboard', 'lb', 'manual', 'man']
     description = "Send a random question for the HAM radio license test."
     category = "education"
     cooldown_seconds = 3
@@ -30,7 +30,7 @@ class HamHelperCommand(BaseCommand):
         "fig_3": f"{figure_base_url}/t-3.png"
     }
     
-    help_string = "hamhelper: HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'manual' for this help."
+    help_string = "Hamhelper: HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'manual'/'man' for this help."
 
     def __init__(self, bot):
         super().__init__(bot)
@@ -291,7 +291,7 @@ class HamHelperCommand(BaseCommand):
                 await asyncio.sleep(12)
             return True
         
-        if text in ("manual"):
+        if text in ("manual", "man"):
             await self.send_response(message, self.help_string)
             return True
 
