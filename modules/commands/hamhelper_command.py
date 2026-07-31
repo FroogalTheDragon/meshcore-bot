@@ -30,6 +30,7 @@ class HamHelperCommand(BaseCommand):
         "fig_2": f"{figure_base_url}/t-2.png",
         "fig_3": f"{figure_base_url}/t-3.png"
     }
+    min_leaderboard_questions = 10
 
     def __init__(self, bot):
         super().__init__(bot)
@@ -137,8 +138,11 @@ class HamHelperCommand(BaseCommand):
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    SELECT * FROM hamhelper_leaderboard ORDER BY question_accuracy DESC;
-                    """
+                    SELECT * FROM hamhelper_leaderboard
+                    WHERE total_questions >= ?
+                    ORDER BY question_accuracy DESC, total_questions DESC;
+                    """,
+                    (self.min_leaderboard_questions,),
                 )
                 rows = cursor.fetchall()
             return rows
