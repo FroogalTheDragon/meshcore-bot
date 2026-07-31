@@ -30,9 +30,7 @@ class HamHelperCommand(BaseCommand):
         "fig_3": f"{figure_base_url}/t-3.png"
     }
     
-    help_string = """
-    hamhelper: HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'manual' for this help.
-    """
+    help_string = "hamhelper: HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'manual' for this help."
 
     def __init__(self, bot):
         super().__init__(bot)
