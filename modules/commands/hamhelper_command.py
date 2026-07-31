@@ -19,7 +19,7 @@ from .base_command import BaseCommand
 
 class HamHelperCommand(BaseCommand):
     name = "hamhelper"
-    keywords = ['hamhelper', 'hh', 'helpmyham', 'hamme', 'whathamisit', 'a', 'b', 'c', 'd', 'leaderboard', 'lb', 'manual', 'man']
+    keywords = ['hamhelper', 'a', 'b', 'c', 'd', 'leaderboard', 'lb', 'manual', 'man']
     description = "Send a random question for the HAM radio license test."
     category = "education"
     cooldown_seconds = 3
