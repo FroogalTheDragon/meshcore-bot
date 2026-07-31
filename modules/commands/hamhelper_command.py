@@ -19,7 +19,7 @@ from .base_command import BaseCommand
 
 class HamHelperCommand(BaseCommand):
     name = "hamhelper"
-    keywords = ['hamhelper', 'helpmyham', 'hamme', 'whathamisit', 'a', 'b', 'c', 'd', 'leaderboard', 'lb']
+    keywords = ['hamhelper', 'hh', 'helpmyham', 'hamme', 'whathamisit', 'a', 'b', 'c', 'd', 'leaderboard', 'lb', 'manual']
     description = "Send a random question for the HAM radio license test."
     category = "education"
     cooldown_seconds = 3
@@ -29,6 +29,10 @@ class HamHelperCommand(BaseCommand):
         "fig_2": f"{figure_base_url}/t-2.png",
         "fig_3": f"{figure_base_url}/t-3.png"
     }
+    
+    help_string = """
+    hamhelper: HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'manual' for this help.
+    """
 
     def __init__(self, bot):
         super().__init__(bot)
@@ -220,9 +224,7 @@ class HamHelperCommand(BaseCommand):
 
         if not await self.send_data(message, question_text, 3):
             return False
-
-        await asyncio.sleep(3)
-        self.get_repeats()
+        await asyncio.sleep(12)
 
         labels = ["A", "B", "C", "D"]
         for index, answer in enumerate(question_answers):
@@ -290,13 +292,17 @@ class HamHelperCommand(BaseCommand):
                 await self.send_response(message, leaderboard_string, skip_user_rate_limit=True)
                 await asyncio.sleep(12)
             return True
+        
+        if text in ("manual"):
+            await self.send_response(message, self.help_string)
+            return True
 
         # --- Bare a/b/c/d with nothing open — not ours ---
         if text in ("a", "b", "c", "d") and not self._active_question:
             return False
 
         # --- Trigger keyword ---
-        if self._active_question:
+        if text in ("hamhelper", "hh"):
             await self._repeat_question(message)
             return True
 
