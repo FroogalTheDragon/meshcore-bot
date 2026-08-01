@@ -178,13 +178,15 @@ class HamHelperCommand(BaseCommand):
         else:
             return None
 
-    async def _ask_new_question(self, message: MeshMessage) -> bool:
-        self._active_question = self.generate_question()
+    async def _ask_question(self, message: MeshMessage) -> bool:
+        # Check if there is currently an active question and generate on if not
         if not self._active_question:
-            await self.send_response(
-                message, "Failed to load question, check logs for more details...",
-                skip_user_rate_limit=True,
-            )
+            self._active_question = self.generate_question()
+            if not self._active_question():
+                await self.send_response(
+                    message, "Failed to load question, check logs for more details...",
+                    skip_user_rate_limit=True,
+                )
             return False
         
         # Check the question length max length 136 chars
@@ -232,55 +234,55 @@ class HamHelperCommand(BaseCommand):
 
         return True
 
-    async def _repeat_question(self, message: MeshMessage):
-        question = None
-        question_pool = self.get_question_pool()
-        for q in list(question_pool):
-            if q["id"] == self._active_question["question_id"]:
-                question = q
+    # async def _repeat_question(self, message: MeshMessage):
+    #     question = None
+    #     question_pool = self.get_question_pool()
+    #     for q in list(question_pool):
+    #         if q["id"] == self._active_question["question_id"]:
+    #             question = q
 
-        if not question:
-            await self.send_response(
-                message, "Failed to load question, check logs for more details...",
-                skip_user_rate_limit=True,
-            )
-            return False
+    #     if not question:
+    #         await self.send_response(
+    #             message, "Failed to load question, check logs for more details...",
+    #             skip_user_rate_limit=True,
+    #         )
+    #         return False
 
-        question_text = question["question"]
-        question_answers = question["answers"]
-        question_figure = question["figure"]
-        correct_letter = question["correct_letter"]
+    #     question_text = question["question"]
+    #     question_answers = question["answers"]
+    #     question_figure = question["figure"]
+    #     correct_letter = question["correct_letter"]
 
-        if not await self.send_data(message, question_text, 3):
-            return False
-        await asyncio.sleep(12)
+    #     if not await self.send_data(message, question_text, 3):
+    #         return False
+    #     await asyncio.sleep(12)
 
-        labels = ["A", "B", "C", "D"]
-        for index, answer in enumerate(question_answers):
-            await asyncio.sleep(12)
-            if index >= len(labels):
-                print("Oops!! Too many options...")
-                continue
-            if not await self.send_data(message, f"{labels[index]}. {answer}", 3):
-                print("Failed to send answers after 3 tries")
-                return False
+    #     labels = ["A", "B", "C", "D"]
+    #     for index, answer in enumerate(question_answers):
+    #         await asyncio.sleep(12)
+    #         if index >= len(labels):
+    #             print("Oops!! Too many options...")
+    #             continue
+    #         if not await self.send_data(message, f"{labels[index]}. {answer}", 3):
+    #             print("Failed to send answers after 3 tries")
+    #             return False
 
-        if question_figure:
-            qurl = self._get_figure_url(question_figure)
-            if qurl:
-                print(f"Question Figure: {qurl}")
-                await asyncio.sleep(12)
-                if not await self.send_data(message, qurl, 3):
-                    print("Failed to send figure for question")
-                    return False
-            else:
-                print(f"Failed to get figure URL, got {qurl} instead")
-                return False
+    #     if question_figure:
+    #         qurl = self._get_figure_url(question_figure)
+    #         if qurl:
+    #             print(f"Question Figure: {qurl}")
+    #             await asyncio.sleep(12)
+    #             if not await self.send_data(message, qurl, 3):
+    #                 print("Failed to send figure for question")
+    #                 return False
+    #         else:
+    #             print(f"Failed to get figure URL, got {qurl} instead")
+    #             return False
 
-        await asyncio.sleep(12)
-        await self.send_data(message, "Anyone can answer — reply with A, B, C, or D!", 3)
+    #     await asyncio.sleep(12)
+    #     await self.send_data(message, "Anyone can answer — reply with A, B, C, or D!", 3)
 
-        return True
+    #     return True
 
     async def execute(self, message: MeshMessage) -> bool:
         text = (message.content_lower or message.content).strip().lower()
@@ -336,7 +338,5 @@ class HamHelperCommand(BaseCommand):
 
         # --- Trigger keyword ---
         if self._active_question:
-            await self._repeat_question(message)
+            await self._ask_question(message)
             return True
-
-        return await self._ask_new_question(message)
