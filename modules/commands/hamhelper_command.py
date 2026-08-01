@@ -3,7 +3,7 @@ Sends random HAM radio practice questions and lets anyone in the channel/DM
 answer them. First correct answer wins, gets logged, and a new question is
 generated. Wrong answers are logged too but leave the question open.
 
-Questions from https://github.com/russolsen/ham_radio_question_pool — thanks russolsen!
+Questions and Figures from https://github.com/russolsen/ham_radio_question_pool — thanks russolsen!
 """
 import asyncio
 import json
@@ -17,6 +17,7 @@ from ..transmission_tracker import TransmissionTracker
 from .base_command import BaseCommand
 
 """
+DO NOT REMOVE
 NOTE: For reference the HAM question data structure:
 {
     "id": "T1A01",
@@ -37,11 +38,10 @@ NOTE: For reference the HAM question data structure:
 class HamHelperCommand(BaseCommand):
     name = "hamhelper"
     keywords = ['hamhelper', 'a', 'b', 'c', 'd', 'leaderboard', 'lb', 'manual', 'man']
-    description = "Send a random question for the HAM radio license test."
+    description = "Hamhelper: HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'manual'/'man' for this help."
     category = "education"
     cooldown_seconds = 3
     figure_base_url = "https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030"
-    help_string = "Hamhelper: HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'manual'/'man' for this help."
     figure_urls = {
         "fig_1": f"{figure_base_url}/t-1.png",
         "fig_2": f"{figure_base_url}/t-2.png",
@@ -51,6 +51,10 @@ class HamHelperCommand(BaseCommand):
     
     # User must answer this many questions before showing up in the leaderboard
     min_leaderboard_questions = 10
+    
+    class HamhelperException(BaseException):
+        def __init__(self, msg: str):
+            super().__init__(msg)
 
     def __init__(self, bot):
         super().__init__(bot)
@@ -97,7 +101,8 @@ class HamHelperCommand(BaseCommand):
                     question = json_data[random.randrange(0, len(json_data))]
                     return question
             else:
-                raise BaseException(f"Couldn't find hamhelper question data at {data_path}")
+                self.logger.error(f"Couldn't find hamhelper question data at {data_path}")
+                raise self.HamhelperException(f"Couldn't find hamhelper question data at {data_path}")
         except BaseException as e:
             print(f"Failed to load question: {e}")
             return None
@@ -146,6 +151,7 @@ class HamHelperCommand(BaseCommand):
                 conn.commit()
         except Exception as e:
             self.logger.error(f"hamhelper: failed to record result for {user_handle}: {e}")
+            raise self.HamhelperException(f"hamhelper: failed to record result for {user_handle}: {e}")
 
     def _get_leaderboard_data(self):
         try:
@@ -163,10 +169,9 @@ class HamHelperCommand(BaseCommand):
                 )
                 rows = cursor.fetchall()
             return rows
-
         except Exception as e:
             self.logger.error(f"Failed to get leaderboard data: {e}")
-            raise
+            raise self.HamhelperException(f"Failed to get leaderboard data: {e}")
 
     def _get_figure_url(self, figure_file_name: str) -> str or None:
         if figure_file_name == "t-1.png":
@@ -179,7 +184,7 @@ class HamHelperCommand(BaseCommand):
             return None
 
     async def _ask_question(self, message: MeshMessage) -> bool:
-        # Check if there is currently an active question and generate on if not
+        # Check if there is currently an active question and generate on if not generate one
         if not self._active_question:
             self._active_question = self.generate_question()
             if not self._active_question():
@@ -187,7 +192,7 @@ class HamHelperCommand(BaseCommand):
                     message, "Failed to load question, check logs for more details...",
                     skip_user_rate_limit=True,
                 )
-            return False
+                raise BaseException("Failed to generate new question")
         
         # Check the question length max length 136 chars
         if len(self._active_question["question"]) > self.mesh_char_limit:
@@ -197,18 +202,9 @@ class HamHelperCommand(BaseCommand):
             # Split question in two equal parts
             np.array_split(q_words, 2)
             
-            q1 = q_words[0].join(" ")
-            q2 = q_words[1].join(" ")
-            
-            # Send first half of question
-            if not await self.send_data(message, q1, 3):
-                raise BaseException("Failed to send question first half")
-            await asyncio.sleep(12)
-            
-            # Send second half of question
-            if not await self.send_data(message, q2, 3):
-                raise BaseException("Failed to send question second half")
-            await asyncio.sleep(12)
+            if not self.send_response_chunked(message, q_words):
+                await self.send_response(message, "Failed to send multi-part question")
+                raise BaseException
         else:
             if not await self.send_data(message, self._active_question["question"], 3):
                 return False
@@ -226,117 +222,64 @@ class HamHelperCommand(BaseCommand):
         if self._active_question["figure"]:
             await asyncio.sleep(12)
             if not await self.send_data(message, self._active_question["figure"], 3):
-                print("Failed to send figure for question")
+                self.logger.error("Failed to send figure for question")
                 return False
-
-        await asyncio.sleep(12)
-        await self.send_data(message, "Anyone can answer — reply with A, B, C, or D!", 3)
-
         return True
 
-    # async def _repeat_question(self, message: MeshMessage):
-    #     question = None
-    #     question_pool = self.get_question_pool()
-    #     for q in list(question_pool):
-    #         if q["id"] == self._active_question["question_id"]:
-    #             question = q
-
-    #     if not question:
-    #         await self.send_response(
-    #             message, "Failed to load question, check logs for more details...",
-    #             skip_user_rate_limit=True,
-    #         )
-    #         return False
-
-    #     question_text = question["question"]
-    #     question_answers = question["answers"]
-    #     question_figure = question["figure"]
-    #     correct_letter = question["correct_letter"]
-
-    #     if not await self.send_data(message, question_text, 3):
-    #         return False
-    #     await asyncio.sleep(12)
-
-    #     labels = ["A", "B", "C", "D"]
-    #     for index, answer in enumerate(question_answers):
-    #         await asyncio.sleep(12)
-    #         if index >= len(labels):
-    #             print("Oops!! Too many options...")
-    #             continue
-    #         if not await self.send_data(message, f"{labels[index]}. {answer}", 3):
-    #             print("Failed to send answers after 3 tries")
-    #             return False
-
-    #     if question_figure:
-    #         qurl = self._get_figure_url(question_figure)
-    #         if qurl:
-    #             print(f"Question Figure: {qurl}")
-    #             await asyncio.sleep(12)
-    #             if not await self.send_data(message, qurl, 3):
-    #                 print("Failed to send figure for question")
-    #                 return False
-    #         else:
-    #             print(f"Failed to get figure URL, got {qurl} instead")
-    #             return False
-
-    #     await asyncio.sleep(12)
-    #     await self.send_data(message, "Anyone can answer — reply with A, B, C, or D!", 3)
-
-    #     return True
-
     async def execute(self, message: MeshMessage) -> bool:
-        text = (message.content_lower or message.content).strip().lower()
+        if self.can_execute_now(message):
+            text = (message.content_lower or message.content).strip().lower()
 
-        # --- Someone is answering the open question ---
-        if self._active_question and text in ("a", "b", "c", "d"):
-            active = self._active_question
-            user_handle = self._user_handle(message)
-            who = message.sender_id or "someone"
+            # --- Someone is answering the open question ---
+            if self._active_question and text in ("a", "b", "c", "d"):
+                active = self._active_question
+                user_handle = self._user_handle(message)
+                who = message.sender_id or "someone"
 
-            if text == active["correct_letter"]:
-                self._active_question = None  # close it out before awaiting anything else
-                self._record_result(user_handle, correct=True)
-                await self.send_response(
-                    message, f"✅ Correct, {who}! Good job!  Next question will be shown in 60 seconds!", skip_user_rate_limit=True
-                )
-                await asyncio.sleep(60)
-                await self._ask_new_question(message)
-            else:
-                self._record_result(user_handle, correct=False)
-                await self.send_response(
-                    message, f"❌ Not quite, {who}. Try again!", skip_user_rate_limit=True
-                )
-            return True
-
-        if text in ("leaderboard", "lb"):
-            leaderboard_rows = self._get_leaderboard_data()
-            if not leaderboard_rows:
-                await self.send_response(
-                    message,
-                    f"No one has answered {self.min_leaderboard_questions}+ questions yet!",
-                    skip_user_rate_limit=True,
-                )
+                if text == active["correct_letter"]:
+                    self._active_question = None  # close it out before awaiting anything else
+                    self._record_result(user_handle, correct=True)
+                    await self.send_response(
+                        message, f"✅ Correct, {who}! Good job!  Next question will be shown in 60 seconds!", skip_user_rate_limit=True
+                    )
+                    await asyncio.sleep(60)
+                    await self._ask_new_question(message)
+                else:
+                    self._record_result(user_handle, correct=False)
+                    await self.send_response(
+                        message, f"❌ Not quite, {who}. Try again!", skip_user_rate_limit=True
+                    )
                 return True
 
-            lines = ["Top 5 Leaderboard:"]
-            for i, row in enumerate(leaderboard_rows, start=1):
-                lines.append(
-                    f"{i}. {row['user_handle']} — {round(row['question_accuracy'], 1)}%"
-                )
-            leaderboard_string = "\n".join(lines)
+            if text in ("leaderboard", "lb"):
+                leaderboard_rows = self._get_leaderboard_data()
+                if not leaderboard_rows:
+                    await self.send_response(
+                        message,
+                        f"No one has answered {self.min_leaderboard_questions}+ questions yet!",
+                        skip_user_rate_limit=True,
+                    )
+                    return True
 
-            await self.send_response(message, leaderboard_string, skip_user_rate_limit=True)
-            return True
-        
-        if text in ("manual", "man"):
-            await self.send_response(message, self.help_string)
-            return True
+                lines = ["Top 5 Leaderboard:"]
+                for i, row in enumerate(leaderboard_rows, start=1):
+                    lines.append(
+                        f"{i}. {row['user_handle']} — {round(row['question_accuracy'], 1)}%"
+                    )
+                leaderboard_string = "\n".join(lines)
 
-        # --- Bare a/b/c/d with nothing open — not ours ---
-        if text in ("a", "b", "c", "d") and not self._active_question:
-            return False
+                await self.send_response(message, leaderboard_string, skip_user_rate_limit=True)
+                return True
+            
+            if text in ("manual", "man"):
+                await self.get_help_text()
+                return True
 
-        # --- Trigger keyword ---
-        if self._active_question:
-            await self._ask_question(message)
-            return True
+            # --- Bare a/b/c/d with nothing open — not ours ---
+            if text in ("a", "b", "c", "d") and not self._active_question:
+                return False
+
+            # --- Trigger keyword ---
+            if self._active_question:
+                await self._ask_question(message)
+                return True
