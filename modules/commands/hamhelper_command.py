@@ -283,3 +283,5 @@ class HamHelperCommand(BaseCommand):
             if self._active_question:
                 await self._ask_question(message)
                 return True
+            
+            self._ask_question(message)
