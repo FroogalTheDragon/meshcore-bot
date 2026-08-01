@@ -9,13 +9,30 @@ import asyncio
 import json
 import random
 import time
+import numpy as np
 from datetime import datetime
 from pathlib import Path
-
 from ..models import MeshMessage
 from ..transmission_tracker import TransmissionTracker
 from .base_command import BaseCommand
 
+"""
+NOTE: For reference the HAM question data structure:
+{
+    "id": "T1A01",
+    "correct": 2,
+    "refs": "[97.1]",
+    "question": "Which of the following is part of the Basis and Purpose of the Amateur Radio Service?",
+    "answers": [
+      "Providing personal radio communications for as many citizens as possible",
+      "Providing communications for international contesting",
+      "Advancing skills in the technical and communication phases of the radio art",
+      "All these choices are correct"
+    ],
+    "figure": "",
+    "correct_letter": "C"
+}
+"""
 
 class HamHelperCommand(BaseCommand):
     name = "hamhelper"
@@ -30,6 +47,9 @@ class HamHelperCommand(BaseCommand):
         "fig_2": f"{figure_base_url}/t-2.png",
         "fig_3": f"{figure_base_url}/t-3.png"
     }
+    mesh_char_limit = 136
+    
+    # User must answer this many questions before showing up in the leaderboard
     min_leaderboard_questions = 10
 
     def __init__(self, bot):
@@ -38,10 +58,6 @@ class HamHelperCommand(BaseCommand):
         # Single shared open question — anyone in the channel/DM can answer it.
         # {"correct_letter": "b", "question_id": ..., "asked_at": ts}
         self._active_question = None
-
-    def get_repeats(self):
-        repeat = self.transmission_tracker.get_repeat_info("hamhelper")
-        print(repeat)
 
     def _user_handle(self, message: MeshMessage) -> str:
         # Same identity convention used elsewhere for per-user rate limiting: pubkey when
@@ -60,7 +76,7 @@ class HamHelperCommand(BaseCommand):
         except BaseException as e:
             print(f"Failed to load question pool: {e}")
             return None
-
+        
     async def send_data(self, message: MeshMessage, data: str, attempts: int) -> bool:
         if not await self.send_response(message, data, skip_user_rate_limit=True):
             while attempts != 0:
@@ -163,24 +179,40 @@ class HamHelperCommand(BaseCommand):
             return None
 
     async def _ask_new_question(self, message: MeshMessage) -> bool:
-        question = self.generate_question()
-        if not question:
+        self._active_question = self.generate_question()
+        if not self._active_question:
             await self.send_response(
                 message, "Failed to load question, check logs for more details...",
                 skip_user_rate_limit=True,
             )
             return False
-
-        question_text = question["question"]
-        question_answers = question["answers"]
-        question_figure = question["figure"]
-        correct_letter = question["correct_letter"]
-
-        if not await self.send_data(message, question_text, 3):
-            return False
+        
+        # Check the question length max length 136 chars
+        if len(self._active_question["question"]) > self.mesh_char_limit:
+            q: str = self._active_question["question"]
+            q_words: [str] = q.split(" ")
+            
+            # Split question in two equal parts
+            np.array_split(q_words, 2)
+            
+            q1 = q_words[0].join(" ")
+            q2 = q_words[1].join(" ")
+            
+            # Send first half of question
+            if not await self.send_data(message, q1, 3):
+                raise BaseException("Failed to send question first half")
+            await asyncio.sleep(12)
+            
+            # Send second half of question
+            if not await self.send_data(message, q2, 3):
+                raise BaseException("Failed to send question second half")
+            await asyncio.sleep(12)
+        else:
+            if not await self.send_data(message, self._active_question["question"], 3):
+                return False
         await asyncio.sleep(12)
         labels = ["A", "B", "C", "D"]
-        for index, answer in enumerate(question_answers):
+        for index, answer in enumerate(self._active_question["answers"]):
             await asyncio.sleep(12)
             if index >= len(labels):
                 print("Oops!! Too many options...")
@@ -189,20 +221,15 @@ class HamHelperCommand(BaseCommand):
                 print("Failed to send answers after 3 tries")
                 return False
 
-        if question_figure:
+        if self._active_question["figure"]:
             await asyncio.sleep(12)
-            if not await self.send_data(message, question_figure, 3):
+            if not await self.send_data(message, self._active_question["figure"], 3):
                 print("Failed to send figure for question")
                 return False
 
         await asyncio.sleep(12)
         await self.send_data(message, "Anyone can answer — reply with A, B, C, or D!", 3)
 
-        self._active_question = {
-            "correct_letter": correct_letter.strip().lower(),
-            "question_id": question.get("id"),
-            "asked_at": time.time(),
-        }
         return True
 
     async def _repeat_question(self, message: MeshMessage):
