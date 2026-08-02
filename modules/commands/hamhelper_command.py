@@ -83,12 +83,6 @@ class HamHelperCommand(BaseCommand):
             fallback=60,
             value_type='int',
         )
-        self.figure_base_url = self.get_config_value(
-            'Hamhelper_Command',
-            'figure_base_url',
-            fallback=self.figure_base_url,
-            value_type='str',
-        )
         self.figure_urls = {
             'fig_1': self.get_config_value(
                 'Hamhelper_Command',
