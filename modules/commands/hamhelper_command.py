@@ -392,23 +392,18 @@ class HamHelperCommand(BaseCommand):
                 await asyncio.sleep(12)
 
             if self._active_question["figure"]:
-                if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
-                    try:
-                        waiter = self.bot.bot_tx_rate_limiter.wait_for_tx()
-                        if asyncio.iscoroutine(waiter):
-                            await waiter
-                    except Exception:
-                        await asyncio.sleep(0)
-                else:
-                    await asyncio.sleep(12)
                 if not await self.send_response(message, self._active_question["figure"], skip_user_rate_limit=True):
                     self.logger.error("Failed to send figure for question")
                     return False
+                asyncio.sleep(12)
             return True
         except asyncio.CancelledError:
             # Scheduled ask was cancelled; stop cleanly without an error
             self.logger.info("hamhelper: scheduled ask task was cancelled")
             return False
+        except Exception as e:
+            self.logger.error(f"Ran into an error asking the question: {e}")
+            raise self.HamhelperException(f"Ran into an error asking the question: {e}")
 
     async def execute(self, message: MeshMessage) -> bool:
         if not getattr(self, 'hamhelper_enabled', True):
