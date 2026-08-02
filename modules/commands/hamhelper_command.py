@@ -9,7 +9,6 @@ import asyncio
 import json
 import random
 import time
-import numpy as np
 from datetime import datetime
 from pathlib import Path
 from ..models import MeshMessage
@@ -360,11 +359,12 @@ class HamHelperCommand(BaseCommand):
             if len(self._active_question["question"]) > self.mesh_char_limit:
                 q: str = self._active_question["question"]
                 q_words: [str] = q.split(" ")
-                
-                # Split question in two equal parts
-                np.array_split(q_words, 2)
-                
-                if not self.send_response_chunked(message, q_words):
+                midpoint = len(q_words) // 2
+                first_half = " ".join(q_words[:midpoint])
+                second_half = " ".join(q_words[midpoint:])
+                chunks = [first_half, second_half] if second_half else [first_half]
+
+                if not await self.send_response_chunked(message, chunks):
                     await self.send_response(message, "Failed to send multi-part question")
                     raise BaseException
             else:
