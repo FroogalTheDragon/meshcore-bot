@@ -40,12 +40,6 @@ class HamHelperCommand(BaseCommand):
     description = "'hamhelper' - HAM radio practice Q&A, answer A/B/C/D\n'leaderboard'/'lb' - show leaderboard\n'help hamhelper' - show this help message"
     category = "education"
     cooldown_seconds = 3
-    figure_base_url = "https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030"
-    figure_urls = {
-        "fig_1": f"{figure_base_url}/t-1.png",
-        "fig_2": f"{figure_base_url}/t-2.png",
-        "fig_3": f"{figure_base_url}/t-3.png"
-    }
     mesh_char_limit = 136
     
     # User must answer this many questions before showing up in the leaderboard
@@ -392,7 +386,7 @@ class HamHelperCommand(BaseCommand):
                 await asyncio.sleep(12)
 
             if self._active_question["figure"]:
-                if not await self.send_response(message, self._active_question["figure"], skip_user_rate_limit=True):
+                if not await self.send_response(message, self._get_figure_url(self._active_question["figure"]), skip_user_rate_limit=True):
                     self.logger.error("Failed to send figure for question")
                     return False
                 asyncio.sleep(12)
