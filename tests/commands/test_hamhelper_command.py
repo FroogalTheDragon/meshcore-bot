@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
-from modules.commands.hamhelper_command import HamHelperCommand
+from modules.commands.hamhelper_command import HamhelperCommand
 from modules.db_manager import DBManager
 from tests.conftest import mock_message
 
@@ -40,7 +40,7 @@ SAMPLE_QUESTIONS = [
 @pytest.fixture
 def hamhelper(command_mock_bot):
     """A fresh HamHelperCommand backed by the lightweight mock bot (no DB)."""
-    return HamHelperCommand(command_mock_bot)
+    return HamhelperCommand(command_mock_bot)
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def hamhelper_with_db(command_mock_bot_with_db, tmp_path):
     against the real schema created by the db migrations."""
     db_path = str(tmp_path / "hamhelper_test.db")
     command_mock_bot_with_db.db_manager = DBManager(command_mock_bot_with_db, db_path)
-    return HamHelperCommand(command_mock_bot_with_db)
+    return HamhelperCommand(command_mock_bot_with_db)
 
 
 @pytest.fixture(autouse=True)
