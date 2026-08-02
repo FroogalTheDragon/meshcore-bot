@@ -37,7 +37,7 @@ NOTE: For reference the HAM question data structure:
 class HamHelperCommand(BaseCommand):
     name = "hamhelper"
     keywords = ['hamhelper', 'a', 'b', 'c', 'd', 'leaderboard', 'lb']
-    description = "'hamhelper' for HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'help hamhelper' for help"
+    description = "'hamhelper' - HAM radio practice Q&A, answer A/B/C/D\n'leaderboard'/'lb' - show leaderboard\n'help hamhelper' - show this help message"
     category = "education"
     cooldown_seconds = 3
     figure_base_url = "https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030"
