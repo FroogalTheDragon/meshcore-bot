@@ -39,7 +39,6 @@ librt==0.13.0
 maidenhead==1.8.0
 MarkupSafe==3.0.3
 meshcore==2.3.7
--e git+ssh://git@github.com/FroogalTheDragon/meshcore-bot.git@ee7806f6c91833db72b6d41a0d77928cedab7d3e#egg=meshcore_bot
 meshcore-cli==1.5.7
 multidict==6.7.1
 mypy==2.3.0
