@@ -244,23 +244,6 @@ class TestHamhelper:
         assert result is True
         hamhelper._ask_question.assert_awaited_once_with(msg)
 
-    # @pytest.mark.asyncio
-    # async def test_ask_question_sends_raw_figure_when_present(self, hamhelper):
-    #     hamhelper._active_question = {
-    #         "question_id": SAMPLE_QUESTIONS[1]["id"],
-    #         "question": SAMPLE_QUESTIONS[1]["question"],
-    #         "answers": SAMPLE_QUESTIONS[1]["answers"],
-    #         "figure": SAMPLE_QUESTIONS[1]["figure"],
-    #         "correct_letter": "b",
-    #         "asked_at": 0,
-    #     }
-    #     msg = mock_message(content="hamhelper")
-
-    #     result = await hamhelper._ask_question(msg)
-
-    #     assert result is True
-    #     assert "t-1.png" in _sent_messages(hamhelper.bot)
-
     @pytest.mark.asyncio
     async def test_ask_question_fails_when_question_text_fails_to_send(self, hamhelper):
         hamhelper._active_question = {
@@ -372,18 +355,6 @@ class TestHamhelperExecute:
 
         assert result is True
         hamhelper._ask_question.assert_awaited_once_with(msg)
-
-    # @pytest.mark.asyncio
-    # async def test_execute_trigger_without_active_question_asks_new(self, hamhelper):
-    #     hamhelper._ask_question = AsyncMock(return_value=True)
-    #     msg = mock_message(content="hamhelper")
-
-    #     result = await hamhelper.execute(msg)
-
-    #     # current implementation calls _ask_question without awaiting it,
-    #     # so execute() returns None and the coroutine is scheduled
-    #     assert result is None
-    #     hamhelper._ask_question.assert_called_once_with(msg)
 
     @pytest.mark.asyncio
     async def test_execute_status_reports_scheduled_question(self, hamhelper):

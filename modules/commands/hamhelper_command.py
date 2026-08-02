@@ -9,8 +9,8 @@ import asyncio
 import json
 import random
 import time
-from datetime import datetime
 from pathlib import Path
+
 from ..models import MeshMessage
 from ..transmission_tracker import TransmissionTracker
 from .base_command import BaseCommand
@@ -41,10 +41,10 @@ class HamhelperCommand(BaseCommand):
     category = "education"
     cooldown_seconds = 3
     mesh_char_limit = 136
-    
+
     # User must answer this many questions before showing up in the leaderboard
     min_leaderboard_questions = 10
-    
+
     class HamhelperException(BaseException):
         def __init__(self, msg: str):
             super().__init__(msg)
@@ -225,7 +225,7 @@ class HamhelperCommand(BaseCommand):
         except Exception as e:
             self.logger.error(f"Failed to load question pool from {question_file}: {e}")
             return None
-        
+
 
     def generate_question(self) -> dict or None:
         question_pool = self.get_question_pool()
@@ -350,7 +350,7 @@ class HamhelperCommand(BaseCommand):
                     skip_user_rate_limit=True,
                 )
                 return False
-        
+
         try:
             # Check the question length max length and only chunk if a positive limit is configured
             if self.mesh_char_limit > 0 and len(self._active_question["question"]) > self.mesh_char_limit:
