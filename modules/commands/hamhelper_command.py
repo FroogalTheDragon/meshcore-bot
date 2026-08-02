@@ -156,7 +156,7 @@ class HamHelperCommand(BaseCommand):
         if self._scheduled_ask_task is not None and not self._scheduled_ask_task.done():
             try:
                 self._scheduled_ask_task.cancel()
-            except Exception:
+            except self.HamhelperException("Failed to stop task"):
                 pass
 
         # Record scheduled metadata and create the tracked task
@@ -442,7 +442,7 @@ class HamHelperCommand(BaseCommand):
             if not leaderboard_rows:
                 await self.send_response(
                     message,
-                    f"No one has answered {self.min_leaderboard_questions}+ questions yet!",
+                    f"No one has answered {self.min_leaderboard_questions} questions yet!",
                     skip_user_rate_limit=True,
                 )
                 return True
