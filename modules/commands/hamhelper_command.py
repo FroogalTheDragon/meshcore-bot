@@ -37,7 +37,7 @@ NOTE: For reference the HAM question data structure:
 class HamHelperCommand(BaseCommand):
     name = "hamhelper"
     keywords = ['hamhelper', 'a', 'b', 'c', 'd', 'leaderboard', 'lb']
-    description = "Hamhelper: HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'manual'/'man' for this help."
+    description = "'hamhelper' for HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'help hamhelper' for help"
     category = "education"
     cooldown_seconds = 3
     figure_base_url = "https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030"
@@ -380,16 +380,6 @@ class HamHelperCommand(BaseCommand):
             else:
                 if not await self.send_response(message, self._active_question["question"], skip_user_rate_limit=True):
                     return False
-            # Prefer the bot's rate limiter if available so sends respect configured timeouts
-            if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
-                try:
-                    waiter = self.bot.bot_tx_rate_limiter.wait_for_tx()
-                    if asyncio.iscoroutine(waiter):
-                        await waiter
-                except Exception:
-                    # Testing environment may provide a non-awaitable MagicMock; yield briefly
-                    await asyncio.sleep(0)
-            else:
                 await asyncio.sleep(12)
             labels = ["A", "B", "C", "D"]
             for index, answer in enumerate(self._active_question["answers"]):
