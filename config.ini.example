@@ -1150,9 +1150,6 @@ mesh_char_limit = 136
 # Delay before automatically scheduling the next question after a correct answer.
 schedule_delay_seconds = 60
 
-# Base URL for figure image links.
-figure_base_url = https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030
-
 # Override the figure URLs if you want to host images elsewhere.
 figure_1_url = https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030/t-1.png
 figure_2_url = https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030/t-2.png
