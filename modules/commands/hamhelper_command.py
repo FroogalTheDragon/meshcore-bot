@@ -59,9 +59,145 @@ class HamHelperCommand(BaseCommand):
     def __init__(self, bot):
         super().__init__(bot)
         self.transmission_tracker = TransmissionTracker(bot)
+        self.hamhelper_enabled = self.get_config_value('Hamhelper_Command', 'enabled', fallback=True, value_type='bool')
+        self.question_pool_path = self.get_config_value(
+            'Hamhelper_Command',
+            'question_pool_path',
+            fallback=str(Path(__file__).resolve().parent.parent.parent / 'data/randomlines/ham_questions.json'),
+            value_type='str',
+        )
+        self.cooldown_seconds = self.get_config_value(
+            'Hamhelper_Command',
+            'cooldown_seconds',
+            fallback=self.cooldown_seconds,
+            value_type='int',
+        )
+        self.min_leaderboard_questions = self.get_config_value(
+            'Hamhelper_Command',
+            'min_leaderboard_questions',
+            fallback=self.min_leaderboard_questions,
+            value_type='int',
+        )
+        self.mesh_char_limit = self.get_config_value(
+            'Hamhelper_Command',
+            'mesh_char_limit',
+            fallback=self.mesh_char_limit,
+            value_type='int',
+        )
+        self.schedule_delay_seconds = self.get_config_value(
+            'Hamhelper_Command',
+            'schedule_delay_seconds',
+            fallback=60,
+            value_type='int',
+        )
+        self.figure_base_url = self.get_config_value(
+            'Hamhelper_Command',
+            'figure_base_url',
+            fallback=self.figure_base_url,
+            value_type='str',
+        )
+        self.figure_urls = {
+            'fig_1': self.get_config_value(
+                'Hamhelper_Command',
+                'figure_1_url',
+                fallback=self.figure_urls['fig_1'],
+                value_type='str',
+            ),
+            'fig_2': self.get_config_value(
+                'Hamhelper_Command',
+                'figure_2_url',
+                fallback=self.figure_urls['fig_2'],
+                value_type='str',
+            ),
+            'fig_3': self.get_config_value(
+                'Hamhelper_Command',
+                'figure_3_url',
+                fallback=self.figure_urls['fig_3'],
+                value_type='str',
+            ),
+        }
         # Single shared open question — anyone in the channel/DM can answer it.
         # {"correct_letter": "b", "question_id": ..., "asked_at": ts}
         self._active_question = None
+        # If a trigger is used when no question is active we schedule an
+        # ask task so the command doesn't block the caller. Track that
+        # task here so we can cancel it if needed (tests, shutdown, etc.).
+        self._scheduled_ask_task = None
+        # Metadata about the scheduled ask (when it was scheduled and any delay)
+        self._scheduled_ask_meta = None
+
+    def _schedule_ask(self, message: MeshMessage) -> None:
+        """Schedule `_ask_question` as a background task and track it.
+
+        Cancels any previously scheduled ask task that hasn't completed yet.
+        The task is stored on `self._scheduled_ask_task` and cleared when
+        it finishes or is cancelled.
+        """
+        # Cancel an already-scheduled task if it's still pending
+        if self._scheduled_ask_task is not None and not self._scheduled_ask_task.done():
+            try:
+                self._scheduled_ask_task.cancel()
+            except Exception:
+                pass
+
+        # Record scheduled metadata and create the tracked task
+        self._scheduled_ask_meta = {'scheduled_at': time.time(), 'delay': 0}
+        task = asyncio.create_task(self._ask_question(message))
+        self._scheduled_ask_task = task
+
+        # Ensure we clear the reference when the task completes
+        def _clear_task(_):
+            try:
+                # avoid keeping dead references
+                self._scheduled_ask_task = None
+            except Exception:
+                pass
+
+        task.add_done_callback(_clear_task)
+
+    def _schedule_delayed_ask(self, message: MeshMessage, delay_seconds: int) -> None:
+        """Schedule `_ask_question` to run after `delay_seconds` and track the task.
+
+        Cancels any previously scheduled ask task that hasn't completed yet.
+        """
+        # Cancel any existing scheduled task
+        if self._scheduled_ask_task is not None and not self._scheduled_ask_task.done():
+            try:
+                self._scheduled_ask_task.cancel()
+            except Exception:
+                pass
+
+        async def _delayed():
+            try:
+                await asyncio.sleep(delay_seconds)
+                await self._ask_question(message)
+            except asyncio.CancelledError:
+                # allow cancellation to propagate silently
+                raise
+
+        # Record scheduled metadata and create the tracked task
+        self._scheduled_ask_meta = {'scheduled_at': time.time(), 'delay': delay_seconds}
+        task = asyncio.create_task(_delayed())
+        self._scheduled_ask_task = task
+
+        def _clear_task_inner(_):
+            try:
+                self._scheduled_ask_task = None
+                self._scheduled_ask_meta = None
+            except Exception:
+                pass
+
+        task.add_done_callback(_clear_task_inner)
+
+    def _cancel_scheduled_ask(self) -> None:
+        """Cancel the currently scheduled ask task, if any."""
+        if self._scheduled_ask_task is not None and not self._scheduled_ask_task.done():
+            try:
+                self._scheduled_ask_task.cancel()
+            except Exception:
+                pass
+        self._scheduled_ask_task = None
+        self._scheduled_ask_meta = None
 
     def _user_handle(self, message: MeshMessage) -> str:
         # Same identity convention used elsewhere for per-user rate limiting: pubkey when
@@ -69,16 +205,18 @@ class HamHelperCommand(BaseCommand):
         return message.sender_pubkey or message.sender_id or "unknown"
 
     def get_question_pool(self) -> dict:
-        data_path = Path(__file__).resolve().parent.parent.parent
+        question_file = self.get_config_value(
+            'Hamhelper_Command',
+            'question_pool_path',
+            fallback=str(Path(__file__).resolve().parent.parent.parent / 'data/randomlines/ham_questions.json'),
+            value_type='str',
+        )
         try:
-            if data_path.exists():
-                with open(data_path / "data/randomlines/ham_questions.json") as data:
-                    json_data = json.load(data)
-                    return json_data
-            else:
-                raise BaseException("Couldn't load question pool!")
-        except BaseException as e:
-            print(f"Failed to load question pool: {e}")
+            with open(Path(question_file), encoding='utf-8') as data:
+                json_data = json.load(data)
+                return json_data
+        except Exception as e:
+            self.logger.error(f"Failed to load question pool from {question_file}: {e}")
             return None
         
     async def send_data(self, message: MeshMessage, data: str, attempts: int) -> bool:
@@ -93,18 +231,16 @@ class HamHelperCommand(BaseCommand):
         return True
 
     def generate_question(self) -> dict or None:
-        data_path = Path(__file__).resolve().parent.parent.parent
+        question_pool = self.get_question_pool()
+        if not question_pool:
+            self.logger.error("Couldn't load hamhelper question pool")
+            return None
+
         try:
-            if data_path.exists():
-                with open(data_path / "data/randomlines/ham_questions.json") as data:
-                    json_data = json.load(data)
-                    question = json_data[random.randrange(0, len(json_data))]
-                    return question
-            else:
-                self.logger.error(f"Couldn't find hamhelper question data at {data_path}")
-                raise self.HamhelperException(f"Couldn't find hamhelper question data at {data_path}")
-        except BaseException as e:
-            print(f"Failed to load question: {e}")
+            question = question_pool[random.randrange(0, len(question_pool))]
+            return question
+        except Exception as e:
+            self.logger.error(f"Failed to select hamhelper question: {e}")
             return None
 
     def _record_result(self, user_handle: str, correct: bool) -> None:
@@ -184,49 +320,108 @@ class HamHelperCommand(BaseCommand):
             return None
 
     async def _ask_question(self, message: MeshMessage) -> bool:
-        # Check if there is currently an active question and generate on if not generate one
+        # Ensure there's an active question; generate one if needed and
+        # normalize its structure for downstream use.
         if not self._active_question:
-            self._active_question = self.generate_question()
-            if not self._active_question():
+            question = self.generate_question()
+            if not question:
                 await self.send_response(
                     message, "Failed to load question, check logs for more details...",
                     skip_user_rate_limit=True,
                 )
-                raise BaseException("Failed to generate new question")
-        
-        # Check the question length max length 136 chars
-        if len(self._active_question["question"]) > self.mesh_char_limit:
-            q: str = self._active_question["question"]
-            q_words: [str] = q.split(" ")
-            
-            # Split question in two equal parts
-            np.array_split(q_words, 2)
-            
-            if not self.send_response_chunked(message, q_words):
-                await self.send_response(message, "Failed to send multi-part question")
-                raise BaseException
-        else:
-            if not await self.send_data(message, self._active_question["question"], 3):
-                return False
-        await asyncio.sleep(12)
-        labels = ["A", "B", "C", "D"]
-        for index, answer in enumerate(self._active_question["answers"]):
-            await asyncio.sleep(12)
-            if index >= len(labels):
-                print("Oops!! Too many options...")
-                continue
-            if not await self.send_data(message, f"{labels[index]}. {answer}", 3):
-                print("Failed to send answers after 3 tries")
                 return False
 
-        if self._active_question["figure"]:
-            await asyncio.sleep(12)
-            if not await self.send_data(message, self._active_question["figure"], 3):
-                self.logger.error("Failed to send figure for question")
-                return False
-        return True
+            # Build a normalized active question and prepend the id and refs
+            qid = question.get("id")
+            raw_q_text = question.get("question", "")
+            refs = question.get("refs") or question.get("ref") or ""
+            # Normalize refs: if list, join; otherwise use as-is
+            if isinstance(refs, (list, tuple)):
+                refs_str = ", ".join(str(r) for r in refs)
+            else:
+                refs_str = str(refs).strip()
+
+            if refs_str:
+                composed_question = f"{qid}, {refs_str}\n{raw_q_text}"
+            else:
+                composed_question = f"{qid}\n{raw_q_text}"
+
+            self._active_question = {
+                "question_id": qid,
+                "question": composed_question,
+                "answers": question.get("answers", []),
+                "figure": question.get("figure", ""),
+                "correct_letter": (question.get("correct_letter") or "").lower(),
+                "asked_at": int(time.time()),
+            }
+        
+        try:
+            # Check the question length max length 136 chars
+            if len(self._active_question["question"]) > self.mesh_char_limit:
+                q: str = self._active_question["question"]
+                q_words: [str] = q.split(" ")
+                
+                # Split question in two equal parts
+                np.array_split(q_words, 2)
+                
+                if not self.send_response_chunked(message, q_words):
+                    await self.send_response(message, "Failed to send multi-part question")
+                    raise BaseException
+            else:
+                if not await self.send_data(message, self._active_question["question"], 3):
+                    return False
+            # Prefer the bot's rate limiter if available so sends respect configured timeouts
+            if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
+                try:
+                    waiter = self.bot.bot_tx_rate_limiter.wait_for_tx()
+                    if asyncio.iscoroutine(waiter):
+                        await waiter
+                except Exception:
+                    # Testing environment may provide a non-awaitable MagicMock; yield briefly
+                    await asyncio.sleep(0)
+            else:
+                await asyncio.sleep(12)
+            labels = ["A", "B", "C", "D"]
+            for index, answer in enumerate(self._active_question["answers"]):
+                if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
+                    try:
+                        waiter = self.bot.bot_tx_rate_limiter.wait_for_tx()
+                        if asyncio.iscoroutine(waiter):
+                            await waiter
+                    except Exception:
+                        await asyncio.sleep(0)
+                else:
+                    await asyncio.sleep(12)
+                if index >= len(labels):
+                    print("Oops!! Too many options...")
+                    continue
+                if not await self.send_data(message, f"{labels[index]}. {answer}", 3):
+                    print("Failed to send answers after 3 tries")
+                    return False
+
+            if self._active_question["figure"]:
+                if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
+                    try:
+                        waiter = self.bot.bot_tx_rate_limiter.wait_for_tx()
+                        if asyncio.iscoroutine(waiter):
+                            await waiter
+                    except Exception:
+                        await asyncio.sleep(0)
+                else:
+                    await asyncio.sleep(12)
+                if not await self.send_data(message, self._active_question["figure"], 3):
+                    self.logger.error("Failed to send figure for question")
+                    return False
+            return True
+        except asyncio.CancelledError:
+            # Scheduled ask was cancelled; stop cleanly without an error
+            self.logger.info("hamhelper: scheduled ask task was cancelled")
+            return False
 
     async def execute(self, message: MeshMessage) -> bool:
+        if not getattr(self, 'hamhelper_enabled', True):
+            return False
+
         if self.can_execute_now(message):
             text = (message.content_lower or message.content).strip().lower()
 
@@ -240,10 +435,10 @@ class HamHelperCommand(BaseCommand):
                     self._active_question = None  # close it out before awaiting anything else
                     self._record_result(user_handle, correct=True)
                     await self.send_response(
-                        message, f"✅ Correct, {who}! Good job!  Next question will be shown in 60 seconds!", skip_user_rate_limit=True
+                        message, f"✅ Correct, {who}! Good job!  Next question will be shown in {self.schedule_delay_seconds} seconds!", skip_user_rate_limit=True
                     )
-                    await asyncio.sleep(60)
-                    await self._ask_new_question(message)
+                    # Schedule the next question after a delay without blocking
+                    self._schedule_delayed_ask(message, self.schedule_delay_seconds)
                 else:
                     self._record_result(user_handle, correct=False)
                     await self.send_response(
@@ -275,13 +470,49 @@ class HamHelperCommand(BaseCommand):
                 await self.get_help_text()
                 return True
 
+            # --- Status: report scheduled ask or active question age ---
+            tokens = text.split()
+            if "status" in tokens or "stat" in tokens:
+                # If there's a scheduled task pending, report time until it runs
+                if self._scheduled_ask_task is not None and not self._scheduled_ask_task.done():
+                    meta = self._scheduled_ask_meta or {}
+                    scheduled_at = meta.get('scheduled_at', 0)
+                    delay = meta.get('delay', 0)
+                    if delay and scheduled_at:
+                        remaining = max(0, int(scheduled_at + delay - time.time()))
+                        await self.send_response(message, f"A question is scheduled to run in {remaining} seconds.", skip_user_rate_limit=True)
+                    elif scheduled_at:
+                        age = int(time.time() - scheduled_at)
+                        await self.send_response(message, f"A question was scheduled {age} seconds ago and will run shortly.", skip_user_rate_limit=True)
+                    else:
+                        await self.send_response(message, "A question is scheduled to run shortly.", skip_user_rate_limit=True)
+                    return True
+
+                # If there's an active question, report its age
+                if self._active_question:
+                    asked_at = self._active_question.get('asked_at', 0)
+                    age = int(time.time() - asked_at) if asked_at else 0
+                    await self.send_response(message, f"Active question asked {age} seconds ago.", skip_user_rate_limit=True)
+                    return True
+
+                # No scheduled or active question
+                await self.send_response(message, "No question is scheduled or active.", skip_user_rate_limit=True)
+                return True
+
             # --- Bare a/b/c/d with nothing open — not ours ---
             if text in ("a", "b", "c", "d") and not self._active_question:
                 return False
 
             # --- Trigger keyword ---
             if self._active_question:
+                # Record per-user execution cooldown for triggering hamhelper
+                user_id = message.sender_id if message.sender_id else None
+                self.record_execution(user_id)
                 await self._ask_question(message)
                 return True
             
-            self._ask_question(message)
+            # Schedule the coroutine so it's not left as an un-awaited coroutine.
+            # Use the scheduler so the task is tracked and can be cancelled.
+            user_id = message.sender_id if message.sender_id else None
+            self.record_execution(user_id)
+            self._schedule_ask(message)
