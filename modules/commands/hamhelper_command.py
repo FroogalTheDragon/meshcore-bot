@@ -393,21 +393,13 @@ class HamHelperCommand(BaseCommand):
                 await asyncio.sleep(12)
             labels = ["A", "B", "C", "D"]
             for index, answer in enumerate(self._active_question["answers"]):
-                if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
-                    try:
-                        waiter = self.bot.bot_tx_rate_limiter.wait_for_tx()
-                        if asyncio.iscoroutine(waiter):
-                            await waiter
-                    except Exception:
-                        await asyncio.sleep(0)
-                else:
-                    await asyncio.sleep(12)
                 if index >= len(labels):
                     print("Oops!! Too many options...")
                     continue
                 if not await self.send_response(message, f"{labels[index]}. {answer}", skip_user_rate_limit=True):
                     self.logger.error("Failed to send answers")
                     return False
+                await asyncio.sleep(12)
 
             if self._active_question["figure"]:
                 if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
