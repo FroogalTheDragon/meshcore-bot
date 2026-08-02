@@ -235,8 +235,31 @@ class HamhelperCommand(BaseCommand):
 
         try:
             question = question_pool[random.randrange(0, len(question_pool))]
+            # Build a normalized active question and prepend the id and refs
+            qid = question.get("id")
+            raw_q_text = question.get("question", "")
+            refs = question.get("refs") or question.get("ref") or ""
+            # Normalize refs: if list, join; otherwise use as-is
+            if isinstance(refs, (list, tuple)):
+                refs_str = ", ".join(str(r) for r in refs)
+            else:
+                refs_str = str(refs).strip()
+
+            if refs_str:
+                composed_question = f"{qid}, {refs_str}\n{raw_q_text}"
+            else:
+                composed_question = f"{qid}\n{raw_q_text}"
+
+            self._active_question = {
+                "question_id": qid,
+                "question": composed_question,
+                "answers": question.get("answers", []),
+                "figure": question.get("figure", ""),
+                "correct_letter": (question.get("correct_letter") or "").lower(),
+                "asked_at": int(time.time()),
+            }
             return question
-        except Exception as e:
+        except self.HamhelperException as e:
             self.logger.error(f"Failed to select hamhelper question: {e}")
             return None
 
@@ -320,37 +343,13 @@ class HamhelperCommand(BaseCommand):
         # Ensure there's an active question; generate one if needed and
         # normalize its structure for downstream use.
         if not self._active_question:
-            question = self.generate_question()
-            if not question:
+            self.generate_question()
+            if not self._active_question:
                 await self.send_response(
                     message, "Failed to load question, check logs for more details...",
                     skip_user_rate_limit=True,
                 )
                 return False
-
-            # Build a normalized active question and prepend the id and refs
-            qid = question.get("id")
-            raw_q_text = question.get("question", "")
-            refs = question.get("refs") or question.get("ref") or ""
-            # Normalize refs: if list, join; otherwise use as-is
-            if isinstance(refs, (list, tuple)):
-                refs_str = ", ".join(str(r) for r in refs)
-            else:
-                refs_str = str(refs).strip()
-
-            if refs_str:
-                composed_question = f"{qid}, {refs_str}\n{raw_q_text}"
-            else:
-                composed_question = f"{qid}\n{raw_q_text}"
-
-            self._active_question = {
-                "question_id": qid,
-                "question": composed_question,
-                "answers": question.get("answers", []),
-                "figure": question.get("figure", ""),
-                "correct_letter": (question.get("correct_letter") or "").lower(),
-                "asked_at": int(time.time()),
-            }
         
         try:
             # Check the question length max length and only chunk if a positive limit is configured
@@ -408,11 +407,18 @@ class HamhelperCommand(BaseCommand):
             if text == active["correct_letter"]:
                 self._active_question = None
                 self._record_result(user_handle, correct=True)
+                # If delay seconds are set to zero that means don't send questions unless asked
+                if self.schedule_delay_seconds > 0:
+                    await self.send_response(
+                        message, f"✅ Correct, {who}! Good job!  Next question will be shown in {self.schedule_delay_seconds} seconds!",
+                        skip_user_rate_limit=True,
+                    )
+                    self._schedule_delayed_ask(message, self.schedule_delay_seconds)
+                    return True
                 await self.send_response(
-                    message, f"✅ Correct, {who}! Good job!  Next question will be shown in {self.schedule_delay_seconds} seconds!",
+                    message, f"✅ Correct, {who}! Good job!  Type Hamhelper to test your knowledge again!",
                     skip_user_rate_limit=True,
                 )
-                self._schedule_delayed_ask(message, self.schedule_delay_seconds)
             else:
                 self._record_result(user_handle, correct=False)
                 await self.send_response(message, f"❌ Not quite, {who}. Try again!", skip_user_rate_limit=True)
