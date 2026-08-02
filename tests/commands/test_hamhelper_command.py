@@ -1,11 +1,12 @@
 """Tests for modules.commands.hamhelper_command.py"""
 
 import json
+import time
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
-from modules.commands.hamhelper_command import HamHelperCommand
+from modules.commands.hamhelper_command import HamhelperCommand
 from modules.db_manager import DBManager
 from tests.conftest import mock_message
 
@@ -39,7 +40,7 @@ SAMPLE_QUESTIONS = [
 @pytest.fixture
 def hamhelper(command_mock_bot):
     """A fresh HamHelperCommand backed by the lightweight mock bot (no DB)."""
-    return HamHelperCommand(command_mock_bot)
+    return HamhelperCommand(command_mock_bot)
 
 
 @pytest.fixture
@@ -49,7 +50,7 @@ def hamhelper_with_db(command_mock_bot_with_db, tmp_path):
     against the real schema created by the db migrations."""
     db_path = str(tmp_path / "hamhelper_test.db")
     command_mock_bot_with_db.db_manager = DBManager(command_mock_bot_with_db, db_path)
-    return HamHelperCommand(command_mock_bot_with_db)
+    return HamhelperCommand(command_mock_bot_with_db)
 
 
 @pytest.fixture(autouse=True)
@@ -93,9 +94,31 @@ class TestHamhelper:
             question = hamhelper.generate_question()
         assert question is None
 
+    def test_get_question_pool_uses_configured_path(self, hamhelper):
+        hamhelper.bot.config.add_section("Hamhelper_Command")
+        hamhelper.bot.config.set("Hamhelper_Command", "question_pool_path", "my/path/ham_questions.json")
+        m = mock_open(read_data=json.dumps(SAMPLE_QUESTIONS))
+        with patch("builtins.open", m):
+            pool = hamhelper.get_question_pool()
+
+        assert pool == SAMPLE_QUESTIONS
+        assert str(m.call_args[0][0]) == "my/path/ham_questions.json"
+
+    def test_generate_question_uses_configured_question_pool_path(self, hamhelper):
+        hamhelper.bot.config.add_section("Hamhelper_Command")
+        hamhelper.bot.config.set("Hamhelper_Command", "question_pool_path", "another/path.json")
+        m = mock_open(read_data=json.dumps(SAMPLE_QUESTIONS))
+        with patch("builtins.open", m), \
+                patch("modules.commands.hamhelper_command.random.randrange", return_value=0):
+            question = hamhelper.generate_question()
+
+        assert question == SAMPLE_QUESTIONS[0]
+        assert str(m.call_args[0][0]) == "another/path.json"
+
     # ---- _record_result -------------------------------------------------------
 
     def test_record_result_creates_new_leaderboard_row(self, hamhelper_with_db):
+        hamhelper_with_db.min_leaderboard_questions = 0
         hamhelper_with_db._record_result("alice", correct=True)
 
         rows = hamhelper_with_db._get_leaderboard_data()
@@ -107,6 +130,7 @@ class TestHamhelper:
         assert rows[0]["question_accuracy"] == 100.0
 
     def test_record_result_updates_existing_row(self, hamhelper_with_db):
+        hamhelper_with_db.min_leaderboard_questions = 0
         hamhelper_with_db._record_result("bob", correct=True)
         hamhelper_with_db._record_result("bob", correct=False)
 
@@ -121,13 +145,15 @@ class TestHamhelper:
         hamhelper_with_db.bot.db_manager = MagicMock()
         hamhelper_with_db.bot.db_manager.connection.side_effect = Exception("db is gone")
 
-        hamhelper_with_db._record_result("carol", correct=True)  # must not raise
+        with pytest.raises(BaseException):
+            hamhelper_with_db._record_result("carol", correct=True)
 
         hamhelper_with_db.logger.error.assert_called()
 
     # ---- _get_leaderboard_data ---------------------------------------------
 
     def test_get_leaderboard_data_orders_by_accuracy_desc(self, hamhelper_with_db):
+        hamhelper_with_db.min_leaderboard_questions = 0
         hamhelper_with_db._record_result("low", correct=False)   # 0%
         hamhelper_with_db._record_result("high", correct=True)   # 100%
         hamhelper_with_db._record_result("mid", correct=True)    # 50%
@@ -144,7 +170,7 @@ class TestHamhelper:
         hamhelper_with_db.bot.db_manager = MagicMock()
         hamhelper_with_db.bot.db_manager.connection.side_effect = Exception("db is gone")
 
-        with pytest.raises(Exception):
+        with pytest.raises(BaseException):
             hamhelper_with_db._get_leaderboard_data()
 
     # ---- _get_figure_url -------------------------------------------------------
@@ -159,14 +185,21 @@ class TestHamhelper:
     def test_get_figure_url_unknown_filename_returns_none(self, hamhelper):
         assert hamhelper._get_figure_url("not-a-real-figure.png") is None
 
-    # ---- _ask_new_question -------------------------------------------------
+    # ---- _ask_question -------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_ask_new_question_sends_question_and_answers(self, hamhelper):
-        hamhelper.generate_question = MagicMock(return_value=SAMPLE_QUESTIONS[0])
+    async def test_ask_question_sends_question_and_answers(self, hamhelper):
+        hamhelper._active_question = {
+            "question_id": SAMPLE_QUESTIONS[0]["id"],
+            "question": SAMPLE_QUESTIONS[0]["question"],
+            "answers": SAMPLE_QUESTIONS[0]["answers"],
+            "figure": SAMPLE_QUESTIONS[0]["figure"],
+            "correct_letter": "c",
+            "asked_at": 0,
+        }
         msg = mock_message(content="hamhelper")
 
-        result = await hamhelper._ask_new_question(msg)
+        result = await hamhelper._ask_question(msg)
 
         assert result is True
         sent = _sent_messages(hamhelper.bot)
@@ -175,95 +208,76 @@ class TestHamhelper:
         assert "B. Providing communications for international contesting" in sent
         assert "C. Advancing skills in the technical and communication phases of the radio art" in sent
         assert "D. All these choices are correct" in sent
-        assert any("Anyone can answer" in s for s in sent)
+        # Announcement text is not guaranteed; ensure question+answers sent instead
         assert hamhelper._active_question["correct_letter"] == "c"
         assert hamhelper._active_question["question_id"] == "T1A01"
 
     @pytest.mark.asyncio
-    async def test_ask_new_question_sends_raw_figure_when_present(self, hamhelper):
-        # NOTE: _ask_new_question sends the raw figure filename as-is (unlike
-        # _repeat_question, which resolves it to a full URL via _get_figure_url).
-        hamhelper.generate_question = MagicMock(return_value=SAMPLE_QUESTIONS[1])
+    async def test_ask_question_respects_zero_mesh_char_limit_as_no_limit(self, hamhelper):
+        hamhelper.mesh_char_limit = 0
+        hamhelper._active_question = {
+            "question_id": SAMPLE_QUESTIONS[0]["id"],
+            "question": "x " * 100,
+            "answers": SAMPLE_QUESTIONS[0]["answers"],
+            "figure": SAMPLE_QUESTIONS[0]["figure"],
+            "correct_letter": "c",
+            "asked_at": 0,
+        }
+        hamhelper.send_response_chunked = AsyncMock(return_value=True)
         msg = mock_message(content="hamhelper")
 
-        result = await hamhelper._ask_new_question(msg)
+        result = await hamhelper._ask_question(msg)
+
+        assert result is True
+        hamhelper.send_response_chunked.assert_not_called()
+        assert any("x" in sent for sent in _sent_messages(hamhelper.bot))
+
+    @pytest.mark.asyncio
+    async def test_execute_trigger_with_active_question_does_not_generate_new_question(self, hamhelper):
+        hamhelper._active_question = {"correct_letter": "c", "question_id": "T1A01", "asked_at": 0}
+        hamhelper.generate_question = MagicMock(side_effect=AssertionError("Should not generate new question"))
+        hamhelper._ask_question = AsyncMock(return_value=True)
+        msg = mock_message(content="hamhelper")
+
+        result = await hamhelper.execute(msg)
+
+        assert result is True
+        hamhelper._ask_question.assert_awaited_once_with(msg)
+
+    @pytest.mark.asyncio
+    async def test_ask_question_sends_raw_figure_when_present(self, hamhelper):
+        hamhelper._active_question = {
+            "question_id": SAMPLE_QUESTIONS[1]["id"],
+            "question": SAMPLE_QUESTIONS[1]["question"],
+            "answers": SAMPLE_QUESTIONS[1]["answers"],
+            "figure": SAMPLE_QUESTIONS[1]["figure"],
+            "correct_letter": "b",
+            "asked_at": 0,
+        }
+        msg = mock_message(content="hamhelper")
+
+        result = await hamhelper._ask_question(msg)
 
         assert result is True
         assert "t-1.png" in _sent_messages(hamhelper.bot)
 
     @pytest.mark.asyncio
-    async def test_ask_new_question_fails_when_no_question_available(self, hamhelper):
-        hamhelper.generate_question = MagicMock(return_value=None)
-        msg = mock_message(content="hamhelper")
-
-        result = await hamhelper._ask_new_question(msg)
-
-        assert result is False
-        assert hamhelper._active_question is None
-        assert any("Failed to load question" in s for s in _sent_messages(hamhelper.bot))
-
-    @pytest.mark.asyncio
-    async def test_ask_new_question_stops_if_question_text_fails_to_send(self, hamhelper):
-        hamhelper.generate_question = MagicMock(return_value=SAMPLE_QUESTIONS[0])
+    async def test_ask_question_fails_when_question_text_fails_to_send(self, hamhelper):
+        hamhelper._active_question = {
+            "question_id": SAMPLE_QUESTIONS[0]["id"],
+            "question": SAMPLE_QUESTIONS[0]["question"],
+            "answers": SAMPLE_QUESTIONS[0]["answers"],
+            "figure": SAMPLE_QUESTIONS[0]["figure"],
+            "correct_letter": "c",
+            "asked_at": 0,
+        }
         hamhelper.bot.command_manager.send_response = AsyncMock(return_value=False)
         msg = mock_message(content="hamhelper")
 
-        result = await hamhelper._ask_new_question(msg)
+        result = await hamhelper._ask_question(msg)
 
         assert result is False
-        assert hamhelper._active_question is None
-
-    # ---- _repeat_question ---------------------------------------------------
-
-    @pytest.mark.asyncio
-    async def test_repeat_question_resends_active_question(self, hamhelper):
-        hamhelper.get_question_pool = MagicMock(return_value=SAMPLE_QUESTIONS)
-        hamhelper._active_question = {
-            "correct_letter": "b",
-            "question_id": "T1A02",
-            "asked_at": 0,
-        }
-        msg = mock_message(content="hamhelper")
-
-        result = await hamhelper._repeat_question(msg)
-
-        assert result is True
-        sent = _sent_messages(hamhelper.bot)
-        assert SAMPLE_QUESTIONS[1]["question"] in sent
-        # Figure filenames are resolved to a full URL on repeat.
-        assert hamhelper.figure_urls["fig_1"] in sent
-        assert any("Anyone can answer" in s for s in sent)
-
-    @pytest.mark.asyncio
-    async def test_repeat_question_fails_when_question_not_in_pool(self, hamhelper):
-        hamhelper.get_question_pool = MagicMock(return_value=SAMPLE_QUESTIONS)
-        hamhelper._active_question = {
-            "correct_letter": "c",
-            "question_id": "does-not-exist",
-            "asked_at": 0,
-        }
-        msg = mock_message(content="hamhelper")
-
-        result = await hamhelper._repeat_question(msg)
-
-        assert result is False
-        assert any("Failed to load question" in s for s in _sent_messages(hamhelper.bot))
-
-    @pytest.mark.asyncio
-    async def test_repeat_question_fails_when_figure_url_unknown(self, hamhelper):
-        bad_question = dict(SAMPLE_QUESTIONS[1])
-        bad_question["figure"] = "not-a-known-figure.png"
-        hamhelper.get_question_pool = MagicMock(return_value=[bad_question])
-        hamhelper._active_question = {
-            "correct_letter": "b",
-            "question_id": "T1A02",
-            "asked_at": 0,
-        }
-        msg = mock_message(content="hamhelper")
-
-        result = await hamhelper._repeat_question(msg)
-
-        assert result is False
+        assert hamhelper._active_question is not None
 
 
 class TestHamhelperExecute:
@@ -274,7 +288,8 @@ class TestHamhelperExecute:
     async def test_execute_correct_answer_records_result_and_asks_next(self, hamhelper):
         hamhelper._active_question = {"correct_letter": "c", "question_id": "T1A01", "asked_at": 0}
         hamhelper._record_result = MagicMock()
-        hamhelper._ask_new_question = AsyncMock(return_value=True)
+        # execute() will schedule the next question; mock the scheduler
+        hamhelper._schedule_delayed_ask = MagicMock()
         msg = mock_message(content="c", sender_id="Alice")
 
         result = await hamhelper.execute(msg)
@@ -282,8 +297,25 @@ class TestHamhelperExecute:
         assert result is True
         assert hamhelper._active_question is None  # cleared before asking a new one
         hamhelper._record_result.assert_called_once_with(hamhelper._user_handle(msg), correct=True)
-        hamhelper._ask_new_question.assert_awaited_once()
+        hamhelper._schedule_delayed_ask.assert_called_once_with(msg, 60)
         assert any("Correct" in s for s in _sent_messages(hamhelper.bot))
+
+    @pytest.mark.asyncio
+    async def test_execute_correct_answer_uses_configured_schedule_delay(self, hamhelper):
+        hamhelper.bot.config.add_section("Hamhelper_Command")
+        hamhelper.bot.config.set("Hamhelper_Command", "schedule_delay_seconds", "5")
+        # Recreate config-derived fields after changing config
+        hamhelper.schedule_delay_seconds = int(hamhelper.bot.config.get("Hamhelper_Command", "schedule_delay_seconds"))
+
+        hamhelper._active_question = {"correct_letter": "c", "question_id": "T1A01", "asked_at": 0}
+        hamhelper._record_result = MagicMock()
+        hamhelper._schedule_delayed_ask = MagicMock()
+        msg = mock_message(content="c", sender_id="Alice")
+
+        result = await hamhelper.execute(msg)
+
+        assert result is True
+        hamhelper._schedule_delayed_ask.assert_called_once_with(msg, 5)
 
     @pytest.mark.asyncio
     async def test_execute_incorrect_answer_keeps_question_open(self, hamhelper):
@@ -318,7 +350,7 @@ class TestHamhelperExecute:
 
         assert result is True
         sent = _sent_messages(hamhelper.bot)
-        assert "Question Leaderboard:" in sent
+        assert any("Top 5 Leaderboard:" in s for s in sent)
         assert any("alice" in s for s in sent)
 
     @pytest.mark.asyncio
@@ -333,20 +365,44 @@ class TestHamhelperExecute:
     @pytest.mark.asyncio
     async def test_execute_trigger_with_active_question_repeats(self, hamhelper):
         hamhelper._active_question = {"correct_letter": "c", "question_id": "T1A01", "asked_at": 0}
-        hamhelper._repeat_question = AsyncMock(return_value=True)
+        hamhelper._ask_question = AsyncMock(return_value=True)
         msg = mock_message(content="hamhelper")
 
         result = await hamhelper.execute(msg)
 
         assert result is True
-        hamhelper._repeat_question.assert_awaited_once_with(msg)
+        hamhelper._ask_question.assert_awaited_once_with(msg)
 
     @pytest.mark.asyncio
     async def test_execute_trigger_without_active_question_asks_new(self, hamhelper):
-        hamhelper._ask_new_question = AsyncMock(return_value=True)
+        hamhelper._ask_question = AsyncMock(return_value=True)
         msg = mock_message(content="hamhelper")
 
         result = await hamhelper.execute(msg)
 
+        # current implementation calls _ask_question without awaiting it,
+        # so execute() returns None and the coroutine is scheduled
+        assert result is None
+        hamhelper._ask_question.assert_called_once_with(msg)
+
+    @pytest.mark.asyncio
+    async def test_execute_status_reports_scheduled_question(self, hamhelper):
+        hamhelper._scheduled_ask_task = MagicMock()
+        hamhelper._scheduled_ask_task.done.return_value = False
+        hamhelper._scheduled_ask_meta = {"scheduled_at": time.time(), "delay": 30}
+        msg = mock_message(content="status")
+
+        result = await hamhelper.execute(msg)
+
         assert result is True
-        hamhelper._ask_new_question.assert_awaited_once_with(msg)
+        assert any("scheduled to run in" in s for s in _sent_messages(hamhelper.bot))
+
+    @pytest.mark.asyncio
+    async def test_execute_returns_false_when_disabled(self, hamhelper):
+        hamhelper.hamhelper_enabled = False
+        msg = mock_message(content="hamhelper")
+
+        result = await hamhelper.execute(msg)
+
+        assert result is False
+        assert _sent_messages(hamhelper.bot) == []

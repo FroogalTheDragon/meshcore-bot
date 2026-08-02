@@ -444,6 +444,22 @@ enabled = false
 [Hacker_Command]
 enabled = false
 
+[Hamhelper_Command]
+# Enable or disable the hamhelper command
+enabled = true
+
+# Question pool JSON file path.
+question_pool_path = data/randomlines/ham_questions.json
+
+# Per-user command cooldown in seconds.
+cooldown_seconds = 3
+
+# Number of questions required before ranking on the leaderboard.
+min_leaderboard_questions = 10
+
+# Delay before the next question is shown after a correct answer.
+schedule_delay_seconds = 60
+
 [Greeter_Command]
 # Enable or disable the greeter command
 enabled = false

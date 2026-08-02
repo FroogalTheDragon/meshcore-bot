@@ -251,6 +251,24 @@ aqi help
 
 ---
 
+### `hamhelper`
+
+HAM practice Q&A. Triggers a multiple-choice question (A/B/C/D). First correct answer wins and the next question is scheduled after a configurable delay.
+
+Usage:
+```
+hamhelper
+```
+
+Configuration (`[Hamhelper_Command]`):
+- `enabled` (true/false) — enable the command
+- `question_pool_path` — path to the JSON question pool
+- `cooldown_seconds` — per-user cooldown for triggering the command in channels
+
+Responses include the question text, answer choices (A–D), and optional figure URLs when present.
+
+---
+
 ### `airplanes [location] [options]` / `overhead [lat,lon]`
 
 Get aircraft tracking information using ADS-B data from airplanes.live or compatible APIs.

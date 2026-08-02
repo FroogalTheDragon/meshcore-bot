@@ -1129,6 +1129,32 @@ long_jokes = false
 # Enable or disable the hacker command (true/false; responds to Linux commands with supervillain mainframe errors)
 enabled = false
 
+[Hamhelper_Command]
+# Enable or disable the hamhelper command (true/false)
+enabled = true
+
+# File path to the HAM question pool JSON file.
+# By default this points to data/randomlines/ham_questions.json in the project.
+question_pool_path = data/randomlines/ham_questions.json
+
+# Per-user cooldown in seconds for triggering hamhelper.
+# Users must wait this many seconds between invocations.
+cooldown_seconds = 3
+
+# How many questions a user must answer before appearing on the leaderboard.
+min_leaderboard_questions = 10
+
+# Maximum safe Mesh message length before chunking.
+mesh_char_limit = 136
+
+# Delay before automatically scheduling the next question after a correct answer.
+schedule_delay_seconds = 60
+
+# Override the figure URLs if you want to host images elsewhere.
+figure_1_url = https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030/t-1.png
+figure_2_url = https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030/t-2.png
+figure_3_url = https://github.com/FroogalTheDragon/ham_radio_question_pool/blob/main/technician-2026-2030/t-3.png
+
 [Multitest_Command]
 # Response format for multitest command results
 # Available fields: {sender}, {path_count}, {paths}, {listening_duration}
