@@ -36,7 +36,7 @@ NOTE: For reference the HAM question data structure:
 
 class HamHelperCommand(BaseCommand):
     name = "hamhelper"
-    keywords = ['hamhelper', 'a', 'b', 'c', 'd', 'leaderboard', 'lb', 'manual', 'man']
+    keywords = ['hamhelper', 'a', 'b', 'c', 'd', 'leaderboard', 'lb']
     description = "Hamhelper: HAM radio practice Q&A, answer A/B/C/D. 'leaderboard'/'lb' for scores, 'manual'/'man' for this help."
     category = "education"
     cooldown_seconds = 3
@@ -124,6 +124,26 @@ class HamHelperCommand(BaseCommand):
         self._scheduled_ask_task = None
         # Metadata about the scheduled ask (when it was scheduled and any delay)
         self._scheduled_ask_meta = None
+
+    def can_execute_now(self, message: MeshMessage) -> bool:
+        """Answering an open question is never subject to the trigger cooldown.
+
+        command_manager calls this before calling execute() at all — and it
+        re-stamps this user's cooldown right before every execute() call,
+        including wrong-answer responses. Without this override, a user who
+        answers wrong and immediately guesses again gets blocked here before
+        execute() ever runs. Everything else (leaderboard, manual, status,
+        triggering a new question) still goes through the normal
+        cooldown/DM/channel checks.
+        """
+        text = (message.content_lower or message.content or "").strip().lower()
+        if self._active_question and text in ("a", "b", "c", "d"):
+            if not self.is_channel_allowed(message):
+                return False
+            if self.requires_dm and not message.is_dm:
+                return False
+            return not (self.requires_admin_access() and not self._check_admin_access(message))
+        return super().can_execute_now(message)
 
     def _schedule_ask(self, message: MeshMessage) -> None:
         """Schedule `_ask_question` as a background task and track it.
@@ -323,7 +343,7 @@ class HamHelperCommand(BaseCommand):
             # Build a normalized active question and prepend the id and refs
             qid = question.get("id")
             raw_q_text = question.get("question", "")
-            refs = question.get("refs") or ""
+            refs = question.get("refs") or question.get("ref") or ""
             # Normalize refs: if list, join; otherwise use as-is
             if isinstance(refs, (list, tuple)):
                 refs_str = ", ".join(str(r) for r in refs)
@@ -346,7 +366,7 @@ class HamHelperCommand(BaseCommand):
         
         try:
             # Check the question length max length and only chunk if a positive limit is configured
-            if len(self._active_question["question"]) > self.mesh_char_limit:
+            if self.mesh_char_limit > 0 and len(self._active_question["question"]) > self.mesh_char_limit:
                 q: str = self._active_question["question"]
                 q_words: [str] = q.split(" ")
                 midpoint = len(q_words) // 2
@@ -360,9 +380,28 @@ class HamHelperCommand(BaseCommand):
             else:
                 if not await self.send_response(message, self._active_question["question"], skip_user_rate_limit=True):
                     return False
+            # Prefer the bot's rate limiter if available so sends respect configured timeouts
+            if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
+                try:
+                    waiter = self.bot.bot_tx_rate_limiter.wait_for_tx()
+                    if asyncio.iscoroutine(waiter):
+                        await waiter
+                except Exception:
+                    # Testing environment may provide a non-awaitable MagicMock; yield briefly
+                    await asyncio.sleep(0)
+            else:
                 await asyncio.sleep(12)
             labels = ["A", "B", "C", "D"]
             for index, answer in enumerate(self._active_question["answers"]):
+                if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
+                    try:
+                        waiter = self.bot.bot_tx_rate_limiter.wait_for_tx()
+                        if asyncio.iscoroutine(waiter):
+                            await waiter
+                    except Exception:
+                        await asyncio.sleep(0)
+                else:
+                    await asyncio.sleep(12)
                 if index >= len(labels):
                     print("Oops!! Too many options...")
                     continue
@@ -371,10 +410,18 @@ class HamHelperCommand(BaseCommand):
                     return False
 
             if self._active_question["figure"]:
+                if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
+                    try:
+                        waiter = self.bot.bot_tx_rate_limiter.wait_for_tx()
+                        if asyncio.iscoroutine(waiter):
+                            await waiter
+                    except Exception:
+                        await asyncio.sleep(0)
+                else:
+                    await asyncio.sleep(12)
                 if not await self.send_response(message, self._active_question["figure"], skip_user_rate_limit=True):
                     self.logger.error("Failed to send figure for question")
                     return False
-                await asyncio.sleep(12)
             return True
         except asyncio.CancelledError:
             # Scheduled ask was cancelled; stop cleanly without an error
@@ -407,17 +454,61 @@ class HamHelperCommand(BaseCommand):
             return True
 
         text_tokens = text.split()
+
         if text in ("leaderboard", "lb"):
-            ...  # unchanged
-        if text in ("manual", "man"):
-            ...
+            leaderboard_rows = self._get_leaderboard_data()
+            if not leaderboard_rows:
+                await self.send_response(
+                    message,
+                    f"No one has answered {self.min_leaderboard_questions}+ questions yet!",
+                    skip_user_rate_limit=True,
+                )
+                return True
+
+            lines = ["Top 5 Leaderboard:"]
+            for i, row in enumerate(leaderboard_rows, start=1):
+                lines.append(
+                    f"{i}. {row['user_handle']} — {round(row['question_accuracy'], 1)}%"
+                )
+            leaderboard_string = "\n".join(lines)
+
+            await self.send_response(message, leaderboard_string, skip_user_rate_limit=True)
+            return True
+
+        # --- Status: report scheduled ask or active question age ---
         if "status" in text_tokens or "stat" in text_tokens:
-            ...
+            # If there's a scheduled task pending, report time until it runs
+            if self._scheduled_ask_task is not None and not self._scheduled_ask_task.done():
+                meta = self._scheduled_ask_meta or {}
+                scheduled_at = meta.get('scheduled_at', 0)
+                delay = meta.get('delay', 0)
+                if delay and scheduled_at:
+                    remaining = max(0, int(scheduled_at + delay - time.time()))
+                    await self.send_response(message, f"A question is scheduled to run in {remaining} seconds.", skip_user_rate_limit=True)
+                elif scheduled_at:
+                    age = int(time.time() - scheduled_at)
+                    await self.send_response(message, f"A question was scheduled {age} seconds ago and will run shortly.", skip_user_rate_limit=True)
+                else:
+                    await self.send_response(message, "A question is scheduled to run shortly.", skip_user_rate_limit=True)
+                return True
+
+            # If there's an active question, report its age
+            if self._active_question:
+                asked_at = self._active_question.get('asked_at', 0)
+                age = int(time.time() - asked_at) if asked_at else 0
+                await self.send_response(message, f"Active question asked {age} seconds ago.", skip_user_rate_limit=True)
+                return True
+
+            # No scheduled or active question
+            await self.send_response(message, "No question is scheduled or active.", skip_user_rate_limit=True)
+            return True
+
+        # --- Bare a/b/c/d with nothing open — not ours ---
         if text in ("a", "b", "c", "d") and not self._active_question:
             return False
 
+        # --- Trigger keyword ---
         if self._active_question:
-            self._schedule_ask(message) # ...actually re-ask
             await self._ask_question(message)
             return True
 
