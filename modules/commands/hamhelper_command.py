@@ -355,8 +355,8 @@ class HamHelperCommand(BaseCommand):
             }
         
         try:
-            # Check the question length max length 136 chars
-            if len(self._active_question["question"]) > self.mesh_char_limit:
+            # Check the question length max length and only chunk if a positive limit is configured
+            if self.mesh_char_limit > 0 and len(self._active_question["question"]) > self.mesh_char_limit:
                 q: str = self._active_question["question"]
                 q_words: [str] = q.split(" ")
                 midpoint = len(q_words) // 2

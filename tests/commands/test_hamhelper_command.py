@@ -213,6 +213,38 @@ class TestHamhelper:
         assert hamhelper._active_question["question_id"] == "T1A01"
 
     @pytest.mark.asyncio
+    async def test_ask_question_respects_zero_mesh_char_limit_as_no_limit(self, hamhelper):
+        hamhelper.mesh_char_limit = 0
+        hamhelper._active_question = {
+            "question_id": SAMPLE_QUESTIONS[0]["id"],
+            "question": "x " * 100,
+            "answers": SAMPLE_QUESTIONS[0]["answers"],
+            "figure": SAMPLE_QUESTIONS[0]["figure"],
+            "correct_letter": "c",
+            "asked_at": 0,
+        }
+        hamhelper.send_response_chunked = AsyncMock(return_value=True)
+        msg = mock_message(content="hamhelper")
+
+        result = await hamhelper._ask_question(msg)
+
+        assert result is True
+        hamhelper.send_response_chunked.assert_not_called()
+        assert any("x" in sent for sent in _sent_messages(hamhelper.bot))
+
+    @pytest.mark.asyncio
+    async def test_execute_trigger_with_active_question_does_not_generate_new_question(self, hamhelper):
+        hamhelper._active_question = {"correct_letter": "c", "question_id": "T1A01", "asked_at": 0}
+        hamhelper.generate_question = MagicMock(side_effect=AssertionError("Should not generate new question"))
+        hamhelper._ask_question = AsyncMock(return_value=True)
+        msg = mock_message(content="hamhelper")
+
+        result = await hamhelper.execute(msg)
+
+        assert result is True
+        hamhelper._ask_question.assert_awaited_once_with(msg)
+
+    @pytest.mark.asyncio
     async def test_ask_question_sends_raw_figure_when_present(self, hamhelper):
         hamhelper._active_question = {
             "question_id": SAMPLE_QUESTIONS[1]["id"],
