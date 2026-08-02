@@ -23,7 +23,7 @@ Test message response to verify bot connectivity and functionality.
 
 **Usage:**
 - `test` - Basic test response
-- `test <phrase>` - Test with optional phrase
+- `t <phrase>` - Test with optional phrase
 
 **Examples:**
 ```
@@ -253,19 +253,57 @@ aqi help
 
 ### `hamhelper`
 
-HAM practice Q&A. Triggers a multiple-choice question (A/B/C/D). First correct answer wins and the next question is scheduled after a configurable delay.
+HAM radio practice Q&A. Sends a multiple-choice question (A/B/C/D) that is shared for the whole channel/DM — **anyone** can answer it, not just whoever triggered it. The first person to answer correctly wins that round; the win/loss is logged to a per-user leaderboard, and (unless disabled) a new question is automatically scheduled after a configurable delay. Wrong answers are logged too, but leave the question open for others to try.
 
-Usage:
+**Aliases / triggers:** `hamhelper` (ask a new question, or re-send the currently open one), `a`, `b`, `c`, `d` (answer the currently open question), `leaderboard`, `lb` (show top scores)
+
+**Usage:**
 ```
 hamhelper
+a
+b
+c
+d
+leaderboard
+lb
+hamhelper status
+hamhelper stat
+help hamhelper
 ```
 
-Configuration (`[Hamhelper_Command]`):
-- `enabled` (true/false) — enable the command
-- `question_pool_path` — path to the JSON question pool
-- `cooldown_seconds` — per-user cooldown for triggering the command in channels
+**Examples:**
+```
+hamhelper          # ask a new question (or re-send the one currently open)
+b                   # answer the open question with choice B
+leaderboard         # show the top 5 accuracy leaderboard
+hamhelper status    # check if a question is active or a new one is scheduled
+help hamhelper      # show hamhelper's own quick-reference help text
+```
 
-Responses include the question text, answer choices (A–D), and optional figure URLs when present.
+**Response:**
+- **Triggering with no question open:** Schedules a new question as a background task (so the trigger itself replies immediately). The question is sent as `<question ID>, <reference>` followed by the question text on the next line (e.g. `T1A01, [97.1]\nWhich of the following...`), split across two mesh messages if it exceeds the configured character limit. Each answer choice (`A.`–`D.`) is then sent as its own message, with a short pause between each, followed by a figure image URL if the question has one.
+- **Triggering while a question is already open:** Re-sends/reminds the channel of that same active question (a new one isn't generated until it's answered correctly).
+- **Answering (`a`/`b`/`c`/`d`):**
+  - Correct: replies `✅ Correct, <name>! Good job!` and either `Next question will be shown in <schedule_delay_seconds> seconds!` (if a delay is configured) or `Type Hamhelper to test your knowledge again!` (if `schedule_delay_seconds` is `0`, meaning no auto-follow-up). The result is recorded to that user's leaderboard stats.
+  - Incorrect: replies `❌ Not quite, <name>. Try again!`, records the miss, and leaves the question open for someone else to answer.
+- **`leaderboard` / `lb`:** Shows up to the top 5 users by accuracy (ties broken by total questions answered), but only counts users who have answered at least `min_leaderboard_questions` questions. If nobody qualifies yet, replies that no one has answered enough questions.
+- **`status` / `stat`:** Reports whether a question is currently active (and how long ago it was asked), whether the next question is scheduled (and how many seconds remain, or how long ago it was scheduled if timing is unknown), or that nothing is active/scheduled.
+
+**Notes:**
+- Answering (`a`/`b`/`c`/`d`) is **not** subject to the normal per-user trigger cooldown — you can guess again immediately after a wrong answer. All other subcommands (asking, leaderboard, status) still respect normal cooldown/DM/channel rules.
+- A bare `a`/`b`/`c`/`d` is ignored (falls through to other commands) if there is no question currently open.
+- Figure images are served from configurable URLs (`figure_1_url`/`figure_2_url`/`figure_3_url`), mapped from the raw figure filenames (`t-1.png`, `t-2.png`, `t-3.png`) in the question data — not sent as the raw filename itself.
+- Leaderboard results persist in the bot's database, so standings survive restarts.
+- If `enabled` is set to `false`, the command silently declines to handle any hamhelper input.
+
+**Configuration** (`[Hamhelper_Command]`):
+- `enabled` — enable/disable the command (default: `true`)
+- `question_pool_path` — path to the JSON question pool (default: `data/randomlines/ham_questions.json`)
+- `cooldown_seconds` — per-user cooldown for triggering the command (default: `3`)
+- `min_leaderboard_questions` — minimum questions answered before a user appears on the leaderboard (default: `10`)
+- `mesh_char_limit` — max characters before a question is split into two mesh messages (default: `136`)
+- `schedule_delay_seconds` — delay before automatically asking the next question after a correct answer; set to `0` to require a manual `hamhelper` trigger instead (default: `60`)
+- `figure_1_url`, `figure_2_url`, `figure_3_url` — URLs used to serve each of the three known question figures
 
 ---
 
@@ -953,7 +991,7 @@ repeater stats
 - NEW_CONTACT events are automatically monitored
 - Repeaters are automatically cataloged when discovered
 - Contact list capacity is monitored in real-time
-- `auto_manage_contacts = device`: Firmware auto-adds **chat (companion)** peers only, with **overwrite oldest non-favourite** when the contact table is full; the bot schedules delayed jobs to set that firmware policy and to **favourite** keys in `Admin_ACL` plus the effective announcements ACL (same rules as the announcements command), then clear **favourite** on other contacts. The bot still runs capacity management on NEW_CONTACT (near-limit `manage_contact_list`) and does **not** call `add_contact` for new companions itself. **Contact limit** for logging and capacity is taken from the radio’s `max_contacts` and, if the live table is larger (under-reported max), raised to match the mesh so counts are not shown as over-capacity. **Companion auto-purge** never runs on the radio in this mode. Count-based **repeater** auto-purge only runs if the table grows **strictly above** that synced limit (normally off while the firmware manages slots).
+- `auto_manage_contacts = device`: Firmware auto-adds **chat (companion)** peers only, with **overwrite oldest non-favourite** when the contact table is full; the bot schedules delayed jobs to set that firmware policy and to **favourite** keys in `Admin_ACL` plus the effective announcements ACL (same rules as the announcements command), then clear **favourite** on other contacts. The bot still runs capacity management on NEW_CONTACT (near-limit `manage_contact_list`) and does **not** call `add_contact` for new companions itself. **Contact limit** for logging and capacity is taken from the radio's `max_contacts` and, if the live table is larger (under-reported max), raised to match the mesh so counts are not shown as over-capacity. **Companion auto-purge** never runs on the radio in this mode. Count-based **repeater** auto-purge only runs if the table grows **strictly above** that synced limit (normally off while the firmware manages slots).
 - `auto_manage_contacts = bot`: Bot adds new companions via `add_contact` (full NEW_CONTACT payload), runs **manage-before-add** when the list is near limit, and **retries once** after `manage_contact_list` if the radio returns `TABLE_FULL`.
 - `auto_manage_contacts = false`: Manual mode - NEW_CONTACT companions are tracked in the database only; use `!repeater` commands to manage the device list.
 
@@ -1089,4 +1127,3 @@ schedule
 ---
 
 For more information about configuring the bot, see the main [README](https://github.com/agessaman/meshcore-bot/blob/main/README.md) file.
-
