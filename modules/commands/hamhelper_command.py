@@ -34,7 +34,7 @@ NOTE: For reference the HAM question data structure:
 }
 """
 
-class HamHelperCommand(BaseCommand):
+class HamhelperCommand(BaseCommand):
     name = "hamhelper"
     keywords = ['hamhelper', 'a', 'b', 'c', 'd', 'leaderboard', 'lb']
     description = "'hamhelper' - HAM radio practice Q&A, answer A/B/C/D\n'leaderboard'/'lb' - show leaderboard\n'help hamhelper' - show this help message"
@@ -87,19 +87,19 @@ class HamHelperCommand(BaseCommand):
             'fig_1': self.get_config_value(
                 'Hamhelper_Command',
                 'figure_1_url',
-                fallback=self.figure_urls['fig_1'],
+                fallback="",
                 value_type='str',
             ),
             'fig_2': self.get_config_value(
                 'Hamhelper_Command',
                 'figure_2_url',
-                fallback=self.figure_urls['fig_2'],
+                fallback="",
                 value_type='str',
             ),
             'fig_3': self.get_config_value(
                 'Hamhelper_Command',
                 'figure_3_url',
-                fallback=self.figure_urls['fig_3'],
+                fallback="",
                 value_type='str',
             ),
         }
