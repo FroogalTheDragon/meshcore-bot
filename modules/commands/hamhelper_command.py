@@ -87,19 +87,19 @@ class HamhelperCommand(BaseCommand):
             'fig_1': self.get_config_value(
                 'Hamhelper_Command',
                 'figure_1_url',
-                fallback="",
+                fallback="https://github.com/russolsen/ham_radio_question_pool/blob/main/technician-2026-2030/t-1.png",
                 value_type='str',
             ),
             'fig_2': self.get_config_value(
                 'Hamhelper_Command',
                 'figure_2_url',
-                fallback="",
+                fallback="https://github.com/russolsen/ham_radio_question_pool/blob/main/technician-2026-2030/t-2.png",
                 value_type='str',
             ),
             'fig_3': self.get_config_value(
                 'Hamhelper_Command',
                 'figure_3_url',
-                fallback="",
+                fallback="https://github.com/russolsen/ham_radio_question_pool/blob/main/technician-2026-2030/t-3.png",
                 value_type='str',
             ),
         }
