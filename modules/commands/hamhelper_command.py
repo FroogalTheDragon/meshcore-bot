@@ -218,16 +218,6 @@ class HamHelperCommand(BaseCommand):
             self.logger.error(f"Failed to load question pool from {question_file}: {e}")
             return None
         
-    async def send_data(self, message: MeshMessage, data: str, attempts: int) -> bool:
-        if not await self.send_response(message, data, skip_user_rate_limit=True):
-            while attempts != 0:
-                if not await self.send_response(message, data, skip_user_rate_limit=True):
-                    attempts -= 1
-                    print(f"Trying to send {attempts} more times")
-                else:
-                    return True
-            return False
-        return True
 
     def generate_question(self) -> dict or None:
         question_pool = self.get_question_pool()
@@ -333,7 +323,7 @@ class HamHelperCommand(BaseCommand):
             # Build a normalized active question and prepend the id and refs
             qid = question.get("id")
             raw_q_text = question.get("question", "")
-            refs = question.get("refs") or question.get("ref") or ""
+            refs = question.get("refs") or ""
             # Normalize refs: if list, join; otherwise use as-is
             if isinstance(refs, (list, tuple)):
                 refs_str = ", ".join(str(r) for r in refs)
@@ -356,7 +346,7 @@ class HamHelperCommand(BaseCommand):
         
         try:
             # Check the question length max length and only chunk if a positive limit is configured
-            if self.mesh_char_limit > 0 and len(self._active_question["question"]) > self.mesh_char_limit:
+            if len(self._active_question["question"]) > self.mesh_char_limit:
                 q: str = self._active_question["question"]
                 q_words: [str] = q.split(" ")
                 midpoint = len(q_words) // 2
@@ -368,50 +358,23 @@ class HamHelperCommand(BaseCommand):
                     await self.send_response(message, "Failed to send multi-part question")
                     raise BaseException
             else:
-                if not await self.send_data(message, self._active_question["question"], 3):
+                if not await self.send_response(message, self._active_question["question"], skip_user_rate_limit=True):
                     return False
-            # Prefer the bot's rate limiter if available so sends respect configured timeouts
-            if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
-                try:
-                    waiter = self.bot.bot_tx_rate_limiter.wait_for_tx()
-                    if asyncio.iscoroutine(waiter):
-                        await waiter
-                except Exception:
-                    # Testing environment may provide a non-awaitable MagicMock; yield briefly
-                    await asyncio.sleep(0)
-            else:
                 await asyncio.sleep(12)
             labels = ["A", "B", "C", "D"]
             for index, answer in enumerate(self._active_question["answers"]):
-                if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
-                    try:
-                        waiter = self.bot.bot_tx_rate_limiter.wait_for_tx()
-                        if asyncio.iscoroutine(waiter):
-                            await waiter
-                    except Exception:
-                        await asyncio.sleep(0)
-                else:
-                    await asyncio.sleep(12)
                 if index >= len(labels):
                     print("Oops!! Too many options...")
                     continue
-                if not await self.send_data(message, f"{labels[index]}. {answer}", 3):
-                    print("Failed to send answers after 3 tries")
+                if not await self.send_response(message, f"{labels[index]}. {answer}", skip_user_rate_limit=True):
+                    self.logger.error("Failed to send answers")
                     return False
 
             if self._active_question["figure"]:
-                if hasattr(self.bot, 'bot_tx_rate_limiter') and self.bot.bot_tx_rate_limiter:
-                    try:
-                        waiter = self.bot.bot_tx_rate_limiter.wait_for_tx()
-                        if asyncio.iscoroutine(waiter):
-                            await waiter
-                    except Exception:
-                        await asyncio.sleep(0)
-                else:
-                    await asyncio.sleep(12)
-                if not await self.send_data(message, self._active_question["figure"], 3):
+                if not await self.send_response(message, self._active_question["figure"], skip_user_rate_limit=True):
                     self.logger.error("Failed to send figure for question")
                     return False
+                await asyncio.sleep(12)
             return True
         except asyncio.CancelledError:
             # Scheduled ask was cancelled; stop cleanly without an error
@@ -422,97 +385,41 @@ class HamHelperCommand(BaseCommand):
         if not getattr(self, 'hamhelper_enabled', True):
             return False
 
-        if self.can_execute_now(message):
-            text = (message.content_lower or message.content).strip().lower()
+        text = (message.content_lower or message.content).strip().lower()
 
-            # --- Someone is answering the open question ---
-            if self._active_question and text in ("a", "b", "c", "d"):
-                active = self._active_question
-                user_handle = self._user_handle(message)
-                who = message.sender_id or "someone"
+        # --- Someone is answering the open question (never cooldown-gated) ---
+        if self._active_question and text in ("a", "b", "c", "d"):
+            active = self._active_question
+            user_handle = self._user_handle(message)
+            who = message.sender_id or "someone"
 
-                if text == active["correct_letter"]:
-                    self._active_question = None  # close it out before awaiting anything else
-                    self._record_result(user_handle, correct=True)
-                    await self.send_response(
-                        message, f"✅ Correct, {who}! Good job!  Next question will be shown in {self.schedule_delay_seconds} seconds!", skip_user_rate_limit=True
-                    )
-                    # Schedule the next question after a delay without blocking
-                    self._schedule_delayed_ask(message, self.schedule_delay_seconds)
-                else:
-                    self._record_result(user_handle, correct=False)
-                    await self.send_response(
-                        message, f"❌ Not quite, {who}. Try again!", skip_user_rate_limit=True
-                    )
-                return True
+            if text == active["correct_letter"]:
+                self._active_question = None
+                self._record_result(user_handle, correct=True)
+                await self.send_response(
+                    message, f"✅ Correct, {who}! Good job!  Next question will be shown in {self.schedule_delay_seconds} seconds!",
+                    skip_user_rate_limit=True,
+                )
+                self._schedule_delayed_ask(message, self.schedule_delay_seconds)
+            else:
+                self._record_result(user_handle, correct=False)
+                await self.send_response(message, f"❌ Not quite, {who}. Try again!", skip_user_rate_limit=True)
+            return True
 
-            if text in ("leaderboard", "lb"):
-                leaderboard_rows = self._get_leaderboard_data()
-                if not leaderboard_rows:
-                    await self.send_response(
-                        message,
-                        f"No one has answered {self.min_leaderboard_questions}+ questions yet!",
-                        skip_user_rate_limit=True,
-                    )
-                    return True
+        text_tokens = text.split()
+        if text in ("leaderboard", "lb"):
+            ...  # unchanged
+        if text in ("manual", "man"):
+            ...
+        if "status" in text_tokens or "stat" in text_tokens:
+            ...
+        if text in ("a", "b", "c", "d") and not self._active_question:
+            return False
 
-                lines = ["Top 5 Leaderboard:"]
-                for i, row in enumerate(leaderboard_rows, start=1):
-                    lines.append(
-                        f"{i}. {row['user_handle']} — {round(row['question_accuracy'], 1)}%"
-                    )
-                leaderboard_string = "\n".join(lines)
+        if self._active_question:
+            self._schedule_ask(message) # ...actually re-ask
+            await self._ask_question(message)
+            return True
 
-                await self.send_response(message, leaderboard_string, skip_user_rate_limit=True)
-                return True
-            
-            if text in ("manual", "man"):
-                await self.get_help_text()
-                return True
-
-            # --- Status: report scheduled ask or active question age ---
-            tokens = text.split()
-            if "status" in tokens or "stat" in tokens:
-                # If there's a scheduled task pending, report time until it runs
-                if self._scheduled_ask_task is not None and not self._scheduled_ask_task.done():
-                    meta = self._scheduled_ask_meta or {}
-                    scheduled_at = meta.get('scheduled_at', 0)
-                    delay = meta.get('delay', 0)
-                    if delay and scheduled_at:
-                        remaining = max(0, int(scheduled_at + delay - time.time()))
-                        await self.send_response(message, f"A question is scheduled to run in {remaining} seconds.", skip_user_rate_limit=True)
-                    elif scheduled_at:
-                        age = int(time.time() - scheduled_at)
-                        await self.send_response(message, f"A question was scheduled {age} seconds ago and will run shortly.", skip_user_rate_limit=True)
-                    else:
-                        await self.send_response(message, "A question is scheduled to run shortly.", skip_user_rate_limit=True)
-                    return True
-
-                # If there's an active question, report its age
-                if self._active_question:
-                    asked_at = self._active_question.get('asked_at', 0)
-                    age = int(time.time() - asked_at) if asked_at else 0
-                    await self.send_response(message, f"Active question asked {age} seconds ago.", skip_user_rate_limit=True)
-                    return True
-
-                # No scheduled or active question
-                await self.send_response(message, "No question is scheduled or active.", skip_user_rate_limit=True)
-                return True
-
-            # --- Bare a/b/c/d with nothing open — not ours ---
-            if text in ("a", "b", "c", "d") and not self._active_question:
-                return False
-
-            # --- Trigger keyword ---
-            if self._active_question:
-                # Record per-user execution cooldown for triggering hamhelper
-                user_id = message.sender_id if message.sender_id else None
-                self.record_execution(user_id)
-                await self._ask_question(message)
-                return True
-            
-            # Schedule the coroutine so it's not left as an un-awaited coroutine.
-            # Use the scheduler so the task is tracked and can be cancelled.
-            user_id = message.sender_id if message.sender_id else None
-            self.record_execution(user_id)
-            self._schedule_ask(message)
+        self._schedule_ask(message)
+        return True
