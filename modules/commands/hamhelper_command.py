@@ -36,7 +36,7 @@ NOTE: For reference the HAM question data structure:
 
 class HamhelperCommand(BaseCommand):
     name = "hamhelper"
-    keywords = ['hamhelper', 'a', 'b', 'c', 'd', 'leaderboard', 'lb']
+    keywords = ['hamhelper', 'a', 'b', 'c', 'd', 'leaderboard', 'lb', 'status']
     description = "'hamhelper' - HAM radio practice Q&A, answer A/B/C/D\n'leaderboard'/'lb' - show leaderboard\n'help hamhelper' - show this help message"
     category = "education"
     cooldown_seconds = 3
@@ -207,8 +207,6 @@ class HamhelperCommand(BaseCommand):
         self._scheduled_ask_meta = None
 
     def _user_handle(self, message: MeshMessage) -> str:
-        # Same identity convention used elsewhere for per-user rate limiting: pubkey when
-        # available, else display name.
         return message.sender_pubkey or message.sender_id or "unknown"
 
     def get_question_pool(self) -> dict:
