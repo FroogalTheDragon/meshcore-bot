@@ -256,6 +256,7 @@ class HamhelperCommand(BaseCommand):
                 "correct_letter": (question.get("correct_letter") or "").lower(),
                 "asked_at": int(time.time()),
             }
+            self.logger.log(f"Successuflly set new question: {self._active_question}")
             return question
         except self.HamhelperException as e:
             self.logger.error(f"Failed to select hamhelper question: {e}")
@@ -366,8 +367,6 @@ class HamhelperCommand(BaseCommand):
                 if not await self.send_response(message, self._active_question["question"], skip_user_rate_limit=True):
                     return False
             await asyncio.sleep(self.cooldown_seconds)
-
-            # random.shuffle(self._active_question["answers"])
             
             # Lets scramble the answers here
             labels = ["A", "B", "C", "D"]
@@ -424,6 +423,7 @@ class HamhelperCommand(BaseCommand):
                     self._record_result(user_handle, correct=False)
                 except Exception:
                     self.logger.error("hamhelper: leaderboard write failed, continuing anyway")
+                self.logger.log(f"The current answer is {self._active_question["correct_letter"]}")
                 await self.send_response(message, f"❌ Not quite, {who}. Try again!", skip_user_rate_limit=True)
             return True
 
@@ -484,6 +484,7 @@ class HamhelperCommand(BaseCommand):
         # --- Trigger keyword ---
         if self._active_question:
             await self._ask_question(message)
+            self.logger.log(f"Active Question: {self._active_question}")
             return True
 
         self._schedule_ask(message)
