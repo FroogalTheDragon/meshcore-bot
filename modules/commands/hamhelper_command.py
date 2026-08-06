@@ -371,7 +371,7 @@ class HamhelperCommand(BaseCommand):
             
             # Lets scramble the answers here
             labels = ["A", "B", "C", "D"]
-            for index, answer in enumerate(answers):
+            for index, answer in enumerate(self._active_question["answers"]):
                 if index >= len(labels):
                     self.logger.warn("Oops!! Too many options...")
                     break
