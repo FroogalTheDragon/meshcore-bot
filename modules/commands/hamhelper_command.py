@@ -232,6 +232,7 @@ class HamhelperCommand(BaseCommand):
             return None
 
         try:
+            self.logger.info("Generating new a new question")
             question = question_pool[random.randrange(0, len(question_pool))]
             # Build a normalized active question and prepend the id and refs
             qid = question.get("id")
@@ -256,7 +257,7 @@ class HamhelperCommand(BaseCommand):
                 "correct_letter": (question.get("correct_letter") or "").lower(),
                 "asked_at": int(time.time()),
             }
-            self.logger.log(f"Successuflly set new question: {self._active_question}")
+            self.logger.info(f"Successuflly set new question: {self._active_question}")
             return question
         except self.HamhelperException as e:
             self.logger.error(f"Failed to select hamhelper question: {e}")
@@ -275,6 +276,7 @@ class HamhelperCommand(BaseCommand):
                 row = cursor.fetchone()
                 now_ts = int(time.time())
 
+                self.logger.info("Attempting to write score to database")
                 if row is None:
                     correct_count = 1 if correct else 0
                     incorrect_count = 0 if correct else 1
@@ -423,7 +425,7 @@ class HamhelperCommand(BaseCommand):
                     self._record_result(user_handle, correct=False)
                 except Exception:
                     self.logger.error("hamhelper: leaderboard write failed, continuing anyway")
-                self.logger.log(f"The current answer is {self._active_question["correct_letter"]}")
+                self.logger.info(f"The current answer is {self._active_question["correct_letter"]}")
                 await self.send_response(message, f"❌ Not quite, {who}. Try again!", skip_user_rate_limit=True)
             return True
 
@@ -484,7 +486,7 @@ class HamhelperCommand(BaseCommand):
         # --- Trigger keyword ---
         if self._active_question:
             await self._ask_question(message)
-            self.logger.log(f"Active Question: {self._active_question}")
+            self.logger.info(f"Active Question: {self._active_question}")
             return True
 
         self._schedule_ask(message)
