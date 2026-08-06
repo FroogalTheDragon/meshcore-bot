@@ -368,7 +368,7 @@ class HamhelperCommand(BaseCommand):
             await asyncio.sleep(self.cooldown_seconds)
             
             # Lets scramble the answers here
-            answers = random.shuffle(self._active_question["answers"])
+            answers = random.shuffle(self._active_question["answers"][:])
             labels = ["A", "B", "C", "D"]
             for index, answer in enumerate(answers):
                 if index >= len(labels):
