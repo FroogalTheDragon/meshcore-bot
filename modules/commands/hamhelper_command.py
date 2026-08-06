@@ -366,8 +366,11 @@ class HamhelperCommand(BaseCommand):
                 if not await self.send_response(message, self._active_question["question"], skip_user_rate_limit=True):
                     return False
             await asyncio.sleep(self.cooldown_seconds)
+            
+            # Lets scramble the answers here
+            answers = random.shuffle(self._active_question["answers"])
             labels = ["A", "B", "C", "D"]
-            for index, answer in enumerate(self._active_question["answers"]):
+            for index, answer in enumerate(answer):
                 if index >= len(labels):
                     print("Oops!! Too many options...")
                     continue
