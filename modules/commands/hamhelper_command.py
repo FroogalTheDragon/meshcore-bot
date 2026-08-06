@@ -370,7 +370,7 @@ class HamhelperCommand(BaseCommand):
             # Lets scramble the answers here
             answers = random.shuffle(self._active_question["answers"])
             labels = ["A", "B", "C", "D"]
-            for index, answer in enumerate(answer):
+            for index, answer in enumerate(answers):
                 if index >= len(labels):
                     print("Oops!! Too many options...")
                     continue
