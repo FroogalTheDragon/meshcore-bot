@@ -365,7 +365,7 @@ class HamhelperCommand(BaseCommand):
             else:
                 if not await self.send_response(message, self._active_question["question"], skip_user_rate_limit=True):
                     return False
-                await asyncio.sleep(12)
+            await asyncio.sleep(self.cooldown_seconds)
             labels = ["A", "B", "C", "D"]
             for index, answer in enumerate(self._active_question["answers"]):
                 if index >= len(labels):
@@ -374,13 +374,13 @@ class HamhelperCommand(BaseCommand):
                 if not await self.send_response(message, f"{labels[index]}. {answer}", skip_user_rate_limit=True):
                     self.logger.error("Failed to send answers")
                     return False
-                await asyncio.sleep(12)
+                await asyncio.sleep(self.cooldown_seconds)
 
             if self._active_question["figure"]:
                 if not await self.send_response(message, self._get_figure_url(self._active_question["figure"]), skip_user_rate_limit=True):
                     self.logger.error("Failed to send figure for question")
                     return False
-                asyncio.sleep(12)
+                asyncio.sleep(self.cooldown_seconds)
             return True
         except asyncio.CancelledError:
             # Scheduled ask was cancelled; stop cleanly without an error
@@ -409,6 +409,7 @@ class HamhelperCommand(BaseCommand):
                 except Exception:
                     self.logger.error("hamhelper: leaderboard write failed, continuing anyway")
 
+                # If schedule delay seconds is set to zero, it will be turned off, users will have to invoke new questions with 'Hamhelper'
                 if self.schedule_delay_seconds > 0:
                     await self.send_response(message, f"✅ Correct, {who}! Good job!  Next question will be shown in {self.schedule_delay_seconds} seconds!", skip_user_rate_limit=True)
                     self._schedule_delayed_ask(message, self.schedule_delay_seconds)
